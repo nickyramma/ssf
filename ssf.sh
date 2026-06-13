@@ -6,6 +6,7 @@
 # 3. Установить Reshala-Remnawave-Bedolaga (DonMatteoVPN)
 # 4. Установить Remnawave Node (Remnanode)
 # 5. Установить TrafficGuard-auto
+# 6. Установить Warp Native
 
 SSH_CONFIG_FILE="/etc/ssh/sshd_config"
 CURRENT_USER=$(whoami) # Получаем имя текущего пользователя
@@ -83,7 +84,7 @@ configure_ssh() {
     if [ "$DISABLE_PASSWORD_AUTH" == "yes" ] && [ -n "$SSH_PUBLIC_KEY" ]; then
         echo "SSH-ключ будет добавлен для пользователя '$CURRENT_USER'."
     elif [ "$DISABLE_PASSWORD_AUTH" == "yes" ] && [ -z "$SSH_PUBLIC_KEY" ]; then
-        echo "ВНИМАНИЕ: SSH-ключ НЕ БУДЕТ добавлен. Убедитесь, что он уже настроен!"
+        echo "ВНИМАНИЕ: SSH-ключ НЕ БУДЕТ добавлен. Убедитесь, чт�� он уже настроен!"
     fi
     read -p "Вы уверены, что хотите применить эти изменения? (y/N): " -n 1 -r
     echo # (добавляем новую строку после ввода)
@@ -201,7 +202,7 @@ configure_ssh() {
         systemctl restart ssh
         echo "Сервис ssh перезапущен."
     else
-        echo "Не удалось найти активный сервис SSH (sshd или ssh). Пожалуйста, проверьте вручную."
+        echo "Не удалось найти активный сервис SSH (sshd или ssh). По��алуйста, проверьте вручную."
         return 1
     fi
 
@@ -214,7 +215,7 @@ configure_ssh() {
         echo "При подключении используйте: ssh -p $NEW_SSH_PORT -i /путь/к/вашему/ssh_ключу ваш_пользователь@ваш_IP_сервера_или_домен"
     fi
     echo "Убедитесь, что новый порт и выбранный метод аутентификации работают, прежде чем закрывать текущее соединение!"
-    read -p "Нажмите Enter для продолжения..."
+    read -p "Нажм��те Enter для продолжения..."
 }
 
 # --- Функция для отключения ICMP Ping ---
@@ -299,7 +300,7 @@ install_donmatteovpn() {
     read -p "Нажмите Enter для продолжения..."
 }
 
-# --- Функция для ус��ановки Remnawave Node ---
+# --- Функция для установки Remnawave Node ---
 install_remnanode() {
     echo "--- Установка Remnawave Node (Remnanode) ---"
     echo "Для установки Remnanode требуется Docker и Docker Compose."
@@ -489,6 +490,49 @@ install_trafficguard() {
     read -p "Нажмите Enter для продолжения..."
 }
 
+# --- Функция для установки Warp Native ---
+install_warp_native() {
+    echo "--- Установка Warp Native ---"
+
+    read -p "Вы уверены, что хотите начать установку Warp Native? (y/N): " -n 1 -r
+    echo
+    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+        echo "Отменено пользователем. Возвращаемся в главное меню."
+        return 1
+    fi
+
+    echo "Начинаем загрузку и запуск установочного скрипта Warp Native..."
+
+    # Проверяем наличие curl
+    if ! command -v curl &> /dev/null; then
+        echo "curl не найден. Устанавливаем curl..."
+        if command -v apt-get &> /dev/null; then
+            apt-get update && apt-get install -y curl
+        elif command -v yum &> /dev/null; then
+            yum install -y curl
+        elif command -v dnf &> /dev/null; then
+            dnf install -y curl
+        else
+            echo "Не удалось установить curl. Пожалуйста, установите его вручную и повторите попытку."
+            read -p "Нажмите Enter для продолжения..."
+            return 1
+        fi
+    fi
+
+    # Выполняем команду установки
+    bash <(curl -fsSL https://raw.githubusercontent.com/distillium/warp-native/main/install.sh)
+    
+    # Проверка успешности установки (зависит от вывода скрипта install.sh)
+    # Здесь трудно сделать универсальную проверку, так как внутренний скрипт может не возвращать стандартный код выхода.
+    # Просто предполагаем успех, если curl и bash отработали без явных ошибок.
+    if [ $? -eq 0 ]; then
+        echo "Установка Warp Native, предположительно, завершена успешно."
+    else
+        echo "Во время установки Warp Native произошла ошибка. Пожалуйста, проверьте логи вывода."
+    fi
+
+    read -p "Нажмите Enter для продолжения..."
+}
 
 # --- Главное меню ---
 main_menu() {
@@ -499,7 +543,8 @@ main_menu() {
         echo "2. Отключить ICMP Ping"
         echo "3. Установить Reshala-Remnawave-Bedolaga (DonMatteoVPN)"
         echo "4. Установить Remnawave Node (Remnanode)"
-        echo "5. Установить TrafficGuard-auto" # Новая опция
+        echo "5. Установить TrafficGuard-auto"
+        echo "6. Установить Warp Native"
         echo "0. Выход"
         echo "----------------------------"
         read -p "Выберите опцию: " OPTION
@@ -509,9 +554,10 @@ main_menu() {
             2) disable_icmp_ping ;;
             3) install_donmatteovpn ;;
             4) install_remnanode ;;
-            5) install_trafficguard ;; # Вызов новой функции
+            5) install_trafficguard ;;
+            6) install_warp_native ;;
             0) echo "Выход из скрипта. До свидания!"; exit 0 ;;
-            *) echo "Неверная опция. Пожалуйста, выберите число от 0 до 5."; read -p "Нажмите Enter для продолжения..." ;;
+            *) echo "Неверная опция. Пожалуйста, выберите число от 0 до 6."; read -p "Нажмите Enter для продолжения..." ;;
         esac
     done
 }
