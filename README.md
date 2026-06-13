@@ -8,7 +8,7 @@
 
 1. **Настройка SSH** - изменение порта, отключение пароля, добавление SSH-ключа
 2. **Отключение ICMP Ping** - скрывает сервер от сканирования
-3. **Установка DonMatteoVPN** - установка Reshala-Remnawave-Bedolaga
+3. **Установка Reshala** - установка Reshala-Remnawave-Bedolaga
 4. **Установка Remnanode** - установка Remnawave Node с Docker
 5. **Установка TrafficGuard-auto** - автоматическое управление трафиком
 
