@@ -7,6 +7,13 @@
 # 4. Установить Remnawave Node (Remnanode)
 # 5. Установить TrafficGuard-auto
 # 6. Установить Warp Native
+# 7. Проверить и установить обновления
+
+SCRIPT_VERSION="1.0.0"
+SCRIPT_NAME="ssf.sh"
+SCRIPT_REPO="https://raw.githubusercontent.com/nickyramma/ssf/main/ssf.sh"
+SCRIPT_PATH="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/$SCRIPT_NAME"
+VERSION_FILE="/tmp/ssf_version.txt"
 
 SSH_CONFIG_FILE="/etc/ssh/sshd_config"
 CURRENT_USER=$(whoami) # Получаем имя текущего пользователя
@@ -84,7 +91,7 @@ configure_ssh() {
     if [ "$DISABLE_PASSWORD_AUTH" == "yes" ] && [ -n "$SSH_PUBLIC_KEY" ]; then
         echo "SSH-ключ будет добавлен для пользователя '$CURRENT_USER'."
     elif [ "$DISABLE_PASSWORD_AUTH" == "yes" ] && [ -z "$SSH_PUBLIC_KEY" ]; then
-        echo "ВНИМАНИЕ: SSH-ключ НЕ БУДЕТ добавлен. Убедитесь, чт�� он уже настроен!"
+        echo "ВНИМАНИЕ: SSH-ключ НЕ БУДЕТ добавлен. Убедитесь, что он уже настроен!"
     fi
     read -p "Вы уверены, что хотите применить эти изменения? (y/N): " -n 1 -r
     echo # (добавляем новую строку после ввода)
@@ -202,7 +209,7 @@ configure_ssh() {
         systemctl restart ssh
         echo "Сервис ssh перезапущен."
     else
-        echo "Не удалось найти активный сервис SSH (sshd или ssh). По��алуйста, проверьте вручную."
+        echo "Не удалось найти активный сервис SSH (sshd или ssh). Пожалуйста, проверьте вручную."
         return 1
     fi
 
@@ -215,7 +222,7 @@ configure_ssh() {
         echo "При подключении используйте: ssh -p $NEW_SSH_PORT -i /путь/к/вашему/ssh_ключу ваш_пользователь@ваш_IP_сервера_или_домен"
     fi
     echo "Убедитесь, что новый порт и выбранный метод аутентификации работают, прежде чем закрывать текущее соединение!"
-    read -p "Нажм��те Enter для продолжения..."
+    read -p "Нажмите Enter для продолжения..."
 }
 
 # --- Функция для отключения ICMP Ping ---
@@ -267,7 +274,7 @@ install_donmatteovpn() {
         return 1
     fi
 
-    echo "Начинаем загрузку и запуск установочного скрипта..."
+    echo "Начинаем загрузку и запуск уста��овочного скрипта..."
 
     # Проверяем наличие wget
     if ! command -v wget &> /dev/null; then
@@ -522,9 +529,7 @@ install_warp_native() {
     # Выполняем команду установки
     bash <(curl -fsSL https://raw.githubusercontent.com/distillium/warp-native/main/install.sh)
     
-    # Проверка успешности установки (зависит от вывода скрипта install.sh)
-    # Здесь трудно сделать универсальную проверку, так как внутренний скрипт может не возвращать стандартный код выхода.
-    # Просто предполагаем успех, если curl и bash отработали без явных ошибок.
+    # Проверка успешности установки
     if [ $? -eq 0 ]; then
         echo "Установка Warp Native, предположительно, завершена успешно."
     else
@@ -532,6 +537,98 @@ install_warp_native() {
     fi
 
     read -p "Нажмите Enter для продолжения..."
+}
+
+# --- Функция для проверки и установки обновлений ---
+check_and_update() {
+    echo "--- Проверка и установка обновлений ---"
+    echo "Текущая версия скрипта: $SCRIPT_VERSION"
+    echo ""
+
+    # Проверяем наличие curl
+    if ! command -v curl &> /dev/null; then
+        echo "curl не найден. Устанавливаем curl..."
+        if command -v apt-get &> /dev/null; then
+            apt-get update && apt-get install -y curl
+        elif command -v yum &> /dev/null; then
+            yum install -y curl
+        elif command -v dnf &> /dev/null; then
+            dnf install -y curl
+        else
+            echo "Не удалось установить curl. Невозможно проверить обновления."
+            read -p "Нажмите Enter для продолжения..."
+            return 1
+        fi
+    fi
+
+    echo "Проверяем наличие новой версии на GitHub..."
+    
+    # Загружаем новый скрипт во временный файл
+    TEMP_SCRIPT="/tmp/ssf_new.sh"
+    if curl -fsSL -o "$TEMP_SCRIPT" "$SCRIPT_REPO"; then
+        echo "✓ Скрипт успешно загружен."
+        
+        # Извлекаем версию из скрипта
+        NEW_VERSION=$(grep "^SCRIPT_VERSION=" "$TEMP_SCRIPT" | cut -d'"' -f2)
+        
+        if [ -z "$NEW_VERSION" ]; then
+            echo "⚠ Не удалось определить версию нового скрипта."
+            rm -f "$TEMP_SCRIPT"
+            read -p "Нажмите Enter для продолжения..."
+            return 1
+        fi
+        
+        echo "Доступная версия на GitHub: $NEW_VERSION"
+        
+        # Сравниваем версии
+        if [ "$NEW_VERSION" == "$SCRIPT_VERSION" ]; then
+            echo "✓ Вы используете последнюю версию скрипта."
+            rm -f "$TEMP_SCRIPT"
+            read -p "Нажмите Enter для продолжения..."
+            return 0
+        else
+            echo ""
+            echo "⚡ Доступно обновление!"
+            echo "Текущая версия: $SCRIPT_VERSION"
+            echo "Новая версия:   $NEW_VERSION"
+            echo ""
+            
+            read -p "Хотите установить обновление? (y/N): " -n 1 -r REPLY
+            echo
+            
+            if [[ $REPLY =~ ^[Yy]$ ]]; then
+                echo "Устанавливаем обновление..."
+                
+                # Создаем резервную копию текущего скрипта
+                cp "$SCRIPT_PATH" "${SCRIPT_PATH}.bak_$(date +%Y%m%d_%H%M%S)"
+                echo "✓ Резервная копия создана: ${SCRIPT_PATH}.bak_*"
+                
+                # Копируем новый скрипт на место старого
+                cp "$TEMP_SCRIPT" "$SCRIPT_PATH"
+                chmod +x "$SCRIPT_PATH"
+                
+                echo "✓ Обновление установлено успешно!"
+                echo ""
+                echo "⚠ ВНИМАНИЕ: Скрипт был обновлен. Перезагрузите его для полного применения изменений."
+                echo "Запустите команду: $SCRIPT_PATH"
+                echo ""
+                rm -f "$TEMP_SCRIPT"
+                read -p "Нажмите Enter для продолжения..."
+                return 0
+            else
+                echo "Обновление отменено пользователем."
+                rm -f "$TEMP_SCRIPT"
+                read -p "Нажмите Enter для продолжения..."
+                return 1
+            fi
+        fi
+    else
+        echo "✗ Ошибка при загрузке скрипта с GitHub."
+        echo "Пожалуйста, проверьте интернет-соединение и повторите попытку."
+        rm -f "$TEMP_SCRIPT"
+        read -p "Нажмите Enter для продолжения..."
+        return 1
+    fi
 }
 
 # --- Главное меню ---
@@ -545,6 +642,7 @@ main_menu() {
         echo "4. Установить Remnawave Node (Remnanode)"
         echo "5. Установить TrafficGuard-auto"
         echo "6. Установить Warp Native"
+        echo "7. Проверить и установить обновления"
         echo "0. Выход"
         echo "----------------------------"
         read -p "Выберите опцию: " OPTION
@@ -556,8 +654,9 @@ main_menu() {
             4) install_remnanode ;;
             5) install_trafficguard ;;
             6) install_warp_native ;;
+            7) check_and_update ;;
             0) echo "Выход из скрипта. До свидания!"; exit 0 ;;
-            *) echo "Неверная опция. Пожалуйста, выберите число от 0 до 6."; read -p "Нажмите Enter для продолжения..." ;;
+            *) echo "Неверная опция. Пожалуйста, выберите число от 0 до 7."; read -p "Нажмите Enter для продолжения..." ;;
         esac
     done
 }
