@@ -11,14 +11,14 @@
 # 8. Проверить и установить обновления
 # 9. Комплексная диагностика Remnanode (VLESS)
 
-SCRIPT_VERSION="1.1.0"
+SCRIPT_VERSION="1.1.1"
 SCRIPT_NAME="ssf.sh"
 SCRIPT_REPO="https://raw.githubusercontent.com/nickyramma/ssf/main/ssf.sh"
 SCRIPT_PATH="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/$SCRIPT_NAME"
 VERSION_FILE="/tmp/ssf_version.txt"
 
 SSH_CONFIG_FILE="/etc/ssh/sshd_config"
-CURRENT_USER=$(whoami) # ��олучаем имя текущего пользователя
+CURRENT_USER=$(whoami) # Получаем имя текущего пользователя
 OLD_SSH_PORT="22"
 
 # --- Функция для конфигурирования SSH ---
@@ -56,7 +56,7 @@ configure_ssh() {
             # Если пользователь выбрал отключить пароль, спрашиваем о добавлении ключа
             echo ""
             echo "Поскольку вы выбрали отключить вход по паролю, мы можем добавить ваш публичный SSH-ключ."
-            echo "Ключ буде�� добавлен для текущего пользователя: '$CURRENT_USER'."
+            echo "Ключ будет добавлен для текущего поль��ователя: '$CURRENT_USER'."
             echo "Пожалуйста, скопируйте полный текст вашего публичного SSH-ключа (начинается с ssh-rsa, ssh-ed25519 и т.д.)"
             echo "и вставьте его ниже. После вставки нажмите Enter, затем Ctrl+D, чтобы завершить ввод."
             echo "(или просто нажмите Enter, если не хотите добавлять ключ сейчас):"
@@ -272,7 +272,7 @@ install_donmatteovpn() {
     read -p "Вы уверены, что хотите начать установку скрипта DonMatteoVPN? (y/N): " -n 1 -r
     echo
     if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-        echo "Отменено пользователем. Возвращаемся в главное мен��."
+        echo "Отменено пользователем. Возвращаемся в главное меню."
         return 1
     fi
 
@@ -299,7 +299,7 @@ install_donmatteovpn() {
       && bash install.sh \
       && reshala
     
-    # Прове��ка успешности установки
+    # Проверка успешности установки
     if [ $? -eq 0 ]; then
         echo "Установка DonMatteoVPN, предположительно, завершена успешно."
     else
@@ -696,7 +696,7 @@ check_and_update() {
         elif command -v dnf &> /dev/null; then
             dnf install -y curl
         else
-            echo "Не удал��сь установить curl. Невозможно проверить обновления."
+            echo "Не удалось установить curl. Невозможно проверить обновления."
             read -p "Нажмите Enter для продолжения..."
             return 1
         fi
@@ -739,23 +739,64 @@ check_and_update() {
             
             if [[ $REPLY =~ ^[Yy]$ ]]; then
                 echo "Устанавливаем обновление..."
+                echo ""
+
+                # Определяем путь к исполняемому файлу ssf
+                SSF_EXEC=$(command -v ssf 2>/dev/null)
                 
+                if [ -z "$SSF_EXEC" ]; then
+                    echo "⚠ Не удалось определить путь к команде 'ssf'."
+                    echo "Используется стандартный путь: /usr/local/bin/ssf"
+                    SSF_EXEC="/usr/local/bin/ssf"
+                fi
+
+                # Проверяем, существует ли файл
+                if [ ! -f "$SSF_EXEC" ]; then
+                    echo "⚠ Файл $SSF_EXEC не найден."
+                    echo "Попытка установить в /usr/local/bin/ssf"
+                    SSF_EXEC="/usr/local/bin/ssf"
+                fi
+
                 # Создаем резервную копию текущего скрипта
-                cp "$SCRIPT_PATH" "${SCRIPT_PATH}.bak_$(date +%Y%m%d_%H%M%S)"
-                echo "✓ Резервная копия создана: ${SCRIPT_PATH}.bak_*"
-                
+                BACKUP_FILE="${SSF_EXEC}.bak_$(date +%Y%m%d_%H%M%S)"
+                if [ -f "$SSF_EXEC" ]; then
+                    cp "$SSF_EXEC" "$BACKUP_FILE"
+                    echo "✓ Резервная копия создана: $BACKUP_FILE"
+                else
+                    echo "⚠ Исходный файл не найден, резервная копия не создана."
+                fi
+
                 # Копируем новый скрипт на место старого
-                cp "$TEMP_SCRIPT" "$SCRIPT_PATH"
-                chmod +x "$SCRIPT_PATH"
-                
+                cp "$TEMP_SCRIPT" "$SSF_EXEC"
+                if [ $? -ne 0 ]; then
+                    echo "✗ Ошибка при копировании файла. Восстанавливаем резервную копию."
+                    if [ -f "$BACKUP_FILE" ]; then
+                        cp "$BACKUP_FILE" "$SSF_EXEC"
+                    fi
+                    rm -f "$TEMP_SCRIPT"
+                    read -p "Нажмите Enter для продолжения..."
+                    return 1
+                fi
+
+                # Делаем файл исполняемым
+                chmod +x "$SSF_EXEC"
+                if [ $? -ne 0 ]; then
+                    echo "✗ Ошибка при установке прав доступа. Восстанавливаем резервную копию."
+                    if [ -f "$BACKUP_FILE" ]; then
+                        cp "$BACKUP_FILE" "$SSF_EXEC"
+                    fi
+                    rm -f "$TEMP_SCRIPT"
+                    read -p "Нажмите Enter для продолжения..."
+                    return 1
+                fi
+
                 echo "✓ Обновление установлено успешно!"
                 echo ""
-                echo "⚠ ВНИМАНИЕ: Скрипт был обновлен. Перезагрузите его для полного применения изменений."
-                echo "Запустите команду: $SCRIPT_PATH"
-                echo ""
+                echo "Запускаем новую версию ssf..."
                 rm -f "$TEMP_SCRIPT"
-                read -p "Нажмите Enter для продолжения..."
-                return 0
+                
+                # Автоматический перезапуск новой версии
+                exec ssf
             else
                 echo "Обновление отменено пользователем."
                 rm -f "$TEMP_SCRIPT"
@@ -1146,7 +1187,7 @@ diagnostic_remnanode() {
             echo "• Неверный publicKey"
             echo "• Неправильный shortId"
             echo "• Неверный SNI/serverName"
-            echo "• Непра��ильный домен в конфигурации"
+            echo "• Неправильный домен в конфигурации"
             echo "• Блокировка провайдером пользователя"
             echo "• Неверный dest в конфигурации"
         fi
