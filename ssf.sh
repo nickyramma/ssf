@@ -11,7 +11,7 @@
 # 8. Проверить и установить обновления
 # 9. Комплексная диагностика Remnanode (VLESS)
 
-SCRIPT_VERSION="1.0.0"
+SCRIPT_VERSION="1.1.0"
 SCRIPT_NAME="ssf.sh"
 SCRIPT_REPO="https://raw.githubusercontent.com/nickyramma/ssf/main/ssf.sh"
 SCRIPT_PATH="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/$SCRIPT_NAME"
@@ -272,7 +272,7 @@ install_donmatteovpn() {
     read -p "Вы уверены, что хотите начать установку скрипта DonMatteoVPN? (y/N): " -n 1 -r
     echo
     if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-        echo "Отменено пользователем. Возвращаемся в главное меню."
+        echo "Отменено пользователем. Возвращаемся в главное мен��."
         return 1
     fi
 
@@ -696,7 +696,7 @@ check_and_update() {
         elif command -v dnf &> /dev/null; then
             dnf install -y curl
         else
-            echo "Не удалось установить curl. Невозможно проверить обновления."
+            echo "Не удал��сь установить curl. Невозможно проверить обновления."
             read -p "Нажмите Enter для продолжения..."
             return 1
         fi
@@ -1146,7 +1146,7 @@ diagnostic_remnanode() {
             echo "• Неверный publicKey"
             echo "• Неправильный shortId"
             echo "• Неверный SNI/serverName"
-            echo "• Неправильный домен в конфигурации"
+            echo "• Непра��ильный домен в конфигурации"
             echo "• Блокировка провайдером пользователя"
             echo "• Неверный dest в конфигурации"
         fi
