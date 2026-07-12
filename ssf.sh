@@ -5,9 +5,10 @@
 # 2. Отключить ICMP Ping
 # 3. Установить Reshala-Remnawave-Bedolaga (DonMatteoVPN)
 # 4. Установить Remnawave Node (Remnanode)
-# 5. Установить TrafficGuard-auto
-# 6. Установить Warp Native
-# 7. Проверить и установить обновления
+# 5. Обновить Remnawave Node (Remnanode)
+# 6. Установить TrafficGuard-auto
+# 7. Установить Warp Native
+# 8. Проверить и установить обновления
 
 SCRIPT_VERSION="1.0.0"
 SCRIPT_NAME="ssf.sh"
@@ -16,7 +17,7 @@ SCRIPT_PATH="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/$SCRIPT_NAME"
 VERSION_FILE="/tmp/ssf_version.txt"
 
 SSH_CONFIG_FILE="/etc/ssh/sshd_config"
-CURRENT_USER=$(whoami) # Получаем имя текущего пользователя
+CURRENT_USER=$(whoami) # ��олучаем имя текущего пользователя
 OLD_SSH_PORT="22"
 
 # --- Функция для конфигурирования SSH ---
@@ -54,7 +55,7 @@ configure_ssh() {
             # Если пользователь выбрал отключить пароль, спрашиваем о добавлении ключа
             echo ""
             echo "Поскольку вы выбрали отключить вход по паролю, мы можем добавить ваш публичный SSH-ключ."
-            echo "Ключ будет добавлен для текущего пользователя: '$CURRENT_USER'."
+            echo "Ключ буде�� добавлен для текущего пользователя: '$CURRENT_USER'."
             echo "Пожалуйста, скопируйте полный текст вашего публичного SSH-ключа (начинается с ssh-rsa, ssh-ed25519 и т.д.)"
             echo "и вставьте его ниже. После вставки нажмите Enter, затем Ctrl+D, чтобы завершить ввод."
             echo "(или просто нажмите Enter, если не хотите добавлять ключ сейчас):"
@@ -194,7 +195,7 @@ configure_ssh() {
 
     else
         echo "Не удалось определить поддерживаемый фаервол (UFW или firewalld)."
-        echo "Вам необходимо вручную настроить ваш фаервол, чтобы разрешить входящие соединения на порту $NEW_SSH_PORT/tcp."
+        echo "Вам необходимо вручную настроить ваш фаервол, чтобы разрешить входящие соединения на порту $NEW_SSH_PORT/tcp"
         echo "Пример для iptables (может отличаться):"
         echo "sudo iptables -A INPUT -p tcp --dport $NEW_SSH_PORT -j ACCEPT"
         echo "sudo service netfilter-persistent save" # или другая команда для сохранения iptables
@@ -221,7 +222,7 @@ configure_ssh() {
         echo "ПОМНИТЕ: Теперь вы можете подключиться ТОЛЬКО с помощью SSH-ключа!"
         echo "При подключении используйте: ssh -p $NEW_SSH_PORT -i /путь/к/вашему/ssh_ключу ваш_пользователь@ваш_IP_сервера_или_домен"
     fi
-    echo "Убедитесь, что новый порт и выбранный метод аутентификации работают, прежде чем закрывать текущее соединение!"
+    echo "Убедитесь, что новый порт и выбранный метод аутентификации работают, прежде чем закрывать текущее соединение."
     read -p "Нажмите Enter для продолжения..."
 }
 
@@ -274,7 +275,7 @@ install_donmatteovpn() {
         return 1
     fi
 
-    echo "Начинаем загрузку и запуск уста��овочного скрипта..."
+    echo "Начинаем загрузку и запуск установочного скрипта..."
 
     # Проверяем наличие wget
     if ! command -v wget &> /dev/null; then
@@ -297,7 +298,7 @@ install_donmatteovpn() {
       && bash install.sh \
       && reshala
     
-    # Проверка успешности установки
+    # Прове��ка успешности установки
     if [ $? -eq 0 ]; then
         echo "Установка DonMatteoVPN, предположительно, завершена успешно."
     else
@@ -352,7 +353,7 @@ install_remnanode() {
             echo "Docker успешно установлен."
             # Добавляем текущего пользователя в группу docker, чтобы не использовать sudo постоянно
             sudo usermod -aG docker "$CURRENT_USER"
-            echo "Пользователь '$CURRENT_USER' добавлен в группу 'docker'. Для применения изменений может потребоваться перезагрузка или выход/вход из системы."
+            echo "Пользователь '$CURRENT_USER' добавлен в группу 'docker'. Для применения изменений может потребоваться перезагрузка."
             # Даем небольшую задержку, чтобы Docker мог полностью инициализироваться
             sleep 5
         else
@@ -450,6 +451,145 @@ EOF
         echo "И логи: docker compose logs -f remnanode"
     else
         echo "Во время запуска Remnawave Node произошла ошибка."
+    fi
+
+    read -p "Нажмите Enter для продолжения..."
+}
+
+# --- Функция для обновления Remnawave Node ---
+update_remnanode() {
+    echo "--- Обновление Remnawave Node (Remnanode) ---"
+
+    # Проверка наличия Docker
+    if ! command -v docker &> /dev/null; then
+        echo "✗ Ошибка: Docker не найден."
+        echo "Пожалуйста, установите Docker перед обновлением Remnanode."
+        read -p "Нажмите Enter для продолжения..."
+        return 1
+    fi
+
+    # Проверка наличия Docker Compose
+    if ! docker compose version &> /dev/null; then
+        echo "✗ Ошибка: Docker Compose V2 не найден."
+        echo "Пожалуйста, установите Docker Compose V2 перед обновлением Remnanode."
+        read -p "Нажмите Enter для продолжения..."
+        return 1
+    fi
+
+    echo "Docker и Docker Compose найдены."
+    echo ""
+
+    # Поиск директории установки Remnanode
+    REMNA_DIR=""
+    SEARCH_PATHS=("/opt/remnanode" "/root/remnanode" "/home/remnanode" "$(pwd)")
+    COMPOSE_FILES=("docker-compose.yml" "docker-compose.yaml" "compose.yml" "compose.yaml")
+
+    echo "Поиск директории установки Remnanode..."
+    for path in "${SEARCH_PATHS[@]}"; do
+        if [ -d "$path" ]; then
+            for compose_file in "${COMPOSE_FILES[@]}"; do
+                if [ -f "$path/$compose_file" ]; then
+                    REMNA_DIR="$path"
+                    echo "✓ Найдена директория: $REMNA_DIR"
+                    echo "  Файл compose: $compose_file"
+                    break 2
+                fi
+            done
+        fi
+    done
+
+    # Если директория не найдена автоматически, спросить у пользователя
+    if [ -z "$REMNA_DIR" ]; then
+        echo "Автоматический поиск не дал результатов."
+        echo ""
+        read -p "Пожалуйста, введите путь к директории Remnanode вручную: " REMNA_DIR
+
+        # Проверка наличия директории
+        if [ ! -d "$REMNA_DIR" ]; then
+            echo "✗ Ошибка: Директория '$REMNA_DIR' не существует."
+            read -p "Нажмите Enter для продолжения..."
+            return 1
+        fi
+
+        # Проверка наличия файла compose
+        FOUND_COMPOSE=0
+        for compose_file in "${COMPOSE_FILES[@]}"; do
+            if [ -f "$REMNA_DIR/$compose_file" ]; then
+                FOUND_COMPOSE=1
+                echo "✓ Найден файл compose: $compose_file"
+                break
+            fi
+        done
+
+        if [ $FOUND_COMPOSE -eq 0 ]; then
+            echo "✗ Ошибка: В директории '$REMNA_DIR' не найдено файлов compose."
+            echo "  Ожидаемые файлы: docker-compose.yml, docker-compose.yaml, compose.yml, compose.yaml"
+            read -p "Нажмите Enter для продолжения..."
+            return 1
+        fi
+    fi
+
+    echo ""
+    echo "--- Информация об обновлении ---"
+    echo "Директория: $REMNA_DIR"
+    echo ""
+
+    # Запрос подтверждения
+    read -p "Продолжить обновление? (y/N): " -n 1 -r
+    echo
+    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+        echo "Отменено пользователем. Возвращаемся в главное меню."
+        return 1
+    fi
+
+    # Переход в директорию Remnanode
+    cd "$REMNA_DIR" || { echo "✗ Ошибка: Не удалось перейти в директорию $REMNA_DIR."; read -p "Нажмите Enter для продолжения..."; return 1; }
+    echo "Перешли в директорию: $REMNA_DIR"
+    echo ""
+
+    # Выполнение обновления
+    echo "--- Начинаем обновление ---"
+    echo ""
+
+    echo "1. Загружаем новый образ контейнера..."
+    docker compose pull
+    if [ $? -ne 0 ]; then
+        echo "✗ Ошибка при загрузке образа (docker compose pull)."
+        read -p "Нажмите Enter для продолжения..."
+        return 1
+    fi
+    echo "✓ Образ успешно загружен."
+    echo ""
+
+    echo "2. Пересоздаем контейнер с новым образом..."
+    docker compose up -d --force-recreate --remove-orphans
+    if [ $? -ne 0 ]; then
+        echo "✗ Ошибка при запуске контейнера (docker compose up -d --force-recreate --remove-orphans)."
+        read -p "Нажмите Enter для продолжения..."
+        return 1
+    fi
+    echo "✓ Контейнер успешно обновлен и запущен."
+    echo ""
+
+    echo "3. Очищаем неиспользуемые образы..."
+    docker image prune -f
+    if [ $? -ne 0 ]; then
+        echo "⚠ Предупреждение: Ошибка при очистке образов (docker image prune -f). Продолжаем."
+    else
+        echo "✓ Неиспользуемые образы удалены."
+    fi
+    echo ""
+
+    # Показываем статус контейнера
+    echo "--- Текущий статус контейнера ---"
+    docker compose ps
+    echo ""
+
+    # Проверка успешности обновления
+    if docker compose ps | grep -q "remnanode.*Up"; then
+        echo "✓ Remnawave Node успешно обновлён!"
+    else
+        echo "⚠ Предупреждение: Статус контейнера remnanode не выглядит правильно. Пожалуйста, проверьте вручную."
     fi
 
     read -p "Нажмите Enter для продолжения..."
@@ -640,9 +780,10 @@ main_menu() {
         echo "2. Отключить ICMP Ping"
         echo "3. Установить Reshala-Remnawave-Bedolaga (DonMatteoVPN)"
         echo "4. Установить Remnawave Node (Remnanode)"
-        echo "5. Установить TrafficGuard-auto"
-        echo "6. Установить Warp Native"
-        echo "7. Проверить и установить обновления"
+        echo "5. Обновить Remnawave Node (Remnanode)"
+        echo "6. Установить TrafficGuard-auto"
+        echo "7. Установить Warp Native"
+        echo "8. Проверить и установить обновления"
         echo "0. Выход"
         echo "----------------------------"
         read -p "Выберите опцию: " OPTION
@@ -652,11 +793,12 @@ main_menu() {
             2) disable_icmp_ping ;;
             3) install_donmatteovpn ;;
             4) install_remnanode ;;
-            5) install_trafficguard ;;
-            6) install_warp_native ;;
-            7) check_and_update ;;
+            5) update_remnanode ;;
+            6) install_trafficguard ;;
+            7) install_warp_native ;;
+            8) check_and_update ;;
             0) echo "Выход из скрипта. До свидания!"; exit 0 ;;
-            *) echo "Неверная опция. Пожалуйста, выберите число от 0 до 7."; read -p "Нажмите Enter для продолжения..." ;;
+            *) echo "Неверная опция. Пожалуйста, выберите число от 0 до 8."; read -p "Нажмите Enter для продолжения..." ;;
         esac
     done
 }
