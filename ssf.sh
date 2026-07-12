@@ -9,6 +9,7 @@
 # 6. Установить TrafficGuard-auto
 # 7. Установить Warp Native
 # 8. Проверить и установить обновления
+# 9. Комплексная диагностика Remnanode (VLESS)
 
 SCRIPT_VERSION="1.0.0"
 SCRIPT_NAME="ssf.sh"
@@ -195,7 +196,7 @@ configure_ssh() {
 
     else
         echo "Не удалось определить поддерживаемый фаервол (UFW или firewalld)."
-        echo "Вам необходимо вручную настроить ваш фаервол, чтобы разрешить входящие соединения на порту $NEW_SSH_PORT/tcp"
+        echo "Вам необходимо вручную настроить ваш фаервол, чтобы разрешить входящие соединения на порту $NEW_SSH_PORT/tcp."
         echo "Пример для iptables (может отличаться):"
         echo "sudo iptables -A INPUT -p tcp --dport $NEW_SSH_PORT -j ACCEPT"
         echo "sudo service netfilter-persistent save" # или другая команда для сохранения iptables
@@ -771,6 +772,431 @@ check_and_update() {
     fi
 }
 
+# --- Функция для комплексной диагностики Remnanode (VLESS) ---
+diagnostic_remnanode() {
+    echo "--- Комплексная диагностика Remnanode (VLESS) ---"
+    echo ""
+
+    # Инициализация переменных для результатов проверки
+    DIAG_RESULTS=()
+    DIAG_WARNINGS=()
+    DIAG_ERRORS=()
+    SERVER_PROBLEMS=0
+    CLIENT_PROBLEMS=0
+
+    # Запрос информации у пользователя
+    read -p "Введите IP пользователя (CIDR): " USER_IP
+    read -p "Введите домен сервера (если используется, иначе Enter): " SERVER_DOMAIN
+    read -p "Введите порт (по умолчанию 443): " DIAG_PORT
+    DIAG_PORT="${DIAG_PORT:-443}"
+
+    read -p "Проверить SSL/TLS сертификат? (y/N): " -n 1 -r CHECK_SSL
+    echo
+
+    # === ПРОВЕРКА 1: Docker ===
+    echo "Выполняется Проверка 1: Docker..."
+    if ! command -v docker &> /dev/null; then
+        DIAG_ERRORS+=("[✗] Docker не установлен")
+        SERVER_PROBLEMS=$((SERVER_PROBLEMS + 1))
+    else
+        DIAG_RESULTS+=("[✓] Docker установлен")
+        
+        if ! docker ps &> /dev/null; then
+            DIAG_ERRORS+=("[✗] Docker daemon не работает")
+            SERVER_PROBLEMS=$((SERVER_PROBLEMS + 1))
+        else
+            DIAG_RESULTS+=("[✓] Docker работает")
+        fi
+
+        if ! docker compose version &> /dev/null; then
+            DIAG_ERRORS+=("[✗] Docker Compose не установлен")
+            SERVER_PROBLEMS=$((SERVER_PROBLEMS + 1))
+        else
+            DIAG_RESULTS+=("[✓] Docker Compose установлен")
+        fi
+    fi
+
+    # === ПРОВЕРКА 2: Контейнеры Remnanode ===
+    echo "Выполняется Проверка 2: Контейнеры Remnanode..."
+    if command -v docker &> /dev/null; then
+        CONTAINER_STATUS=$(docker ps -a --filter "name=remnanode" --format "{{.Status}}" 2>/dev/null | head -1)
+        
+        if [ -z "$CONTAINER_STATUS" ]; then
+            DIAG_WARNINGS+=("[!] Контейнер remnanode не найден")
+            SERVER_PROBLEMS=$((SERVER_PROBLEMS + 1))
+        elif echo "$CONTAINER_STATUS" | grep -q "Up"; then
+            DIAG_RESULTS+=("[✓] Контейнер запущен")
+        elif echo "$CONTAINER_STATUS" | grep -q "Exited"; then
+            DIAG_ERRORS+=("[✗] Контейнер остановлен")
+            SERVER_PROBLEMS=$((SERVER_PROBLEMS + 1))
+        elif echo "$CONTAINER_STATUS" | grep -q "Restarting"; then
+            DIAG_ERRORS+=("[✗] Контейнер перезапускается (может быть критическая ошибка)")
+            SERVER_PROBLEMS=$((SERVER_PROBLEMS + 1))
+        fi
+    fi
+
+    # === ПРОВЕРКА 3: Прослушивание портов ===
+    echo "Выполняется Проверка 3: Прослушивание портов..."
+    if command -v ss &> /dev/null; then
+        PORT_CHECK=$(ss -tulpn 2>/dev/null | grep -E ":$DIAG_PORT\s" | head -1)
+    elif command -v netstat &> /dev/null; then
+        PORT_CHECK=$(netstat -tulpn 2>/dev/null | grep -E ":$DIAG_PORT\s" | head -1)
+    else
+        PORT_CHECK=""
+    fi
+
+    if [ -n "$PORT_CHECK" ]; then
+        DIAG_RESULTS+=("[✓] Порт $DIAG_PORT прослушивается")
+    else
+        DIAG_ERRORS+=("[✗] Порт $DIAG_PORT не прослушивается")
+        SERVER_PROBLEMS=$((SERVER_PROBLEMS + 1))
+    fi
+
+    # === ПРОВЕРКА 4: Firewall ===
+    echo "Выполняется Проверка 4: Firewall..."
+    FIREWALL_BLOCKED=0
+    
+    if command -v ufw &> /dev/null; then
+        if ufw status | grep -q "Status: active"; then
+            if ! ufw status | grep -qE "$DIAG_PORT/tcp.*ALLOW"; then
+                DIAG_ERRORS+=("[✗] UFW блокирует порт $DIAG_PORT")
+                FIREWALL_BLOCKED=1
+                SERVER_PROBLEMS=$((SERVER_PROBLEMS + 1))
+            else
+                DIAG_RESULTS+=("[✓] UFW разрешает порт $DIAG_PORT")
+            fi
+        else
+            DIAG_RESULTS+=("[✓] UFW не активен")
+        fi
+    fi
+
+    if command -v firewall-cmd &> /dev/null; then
+        if ! firewall-cmd --query-port="$DIAG_PORT/tcp" &> /dev/null; then
+            DIAG_ERRORS+=("[✗] firewalld блокирует порт $DIAG_PORT")
+            FIREWALL_BLOCKED=1
+            SERVER_PROBLEMS=$((SERVER_PROBLEMS + 1))
+        else
+            DIAG_RESULTS+=("[✓] firewalld разрешает порт $DIAG_PORT")
+        fi
+    fi
+
+    if [ $FIREWALL_BLOCKED -eq 0 ] && ! command -v ufw &> /dev/null && ! command -v firewall-cmd &> /dev/null; then
+        DIAG_RESULTS+=("[✓] Firewall не обнаружен (или iptables используется)")
+    fi
+
+    # === ПРОВЕРКА 5: Системное время ===
+    echo "Выполняется Проверка 5: Системное время..."
+    if command -v timedatectl &> /dev/null; then
+        if timedatectl | grep -q "System clock synchronized: yes\|synchronized: yes"; then
+            DIAG_RESULTS+=("[✓] Время синхронизировано")
+        else
+            DIAG_WARNINGS+=("[!] Время может быть не синхронизировано")
+        fi
+    else
+        DIAG_RESULTS+=("[✓] Проверка времени не доступна")
+    fi
+
+    # === ПРОВЕРКА 6: Ресурсы сервера ===
+    echo "Выполняется Проверка 6: Ресурсы сервера..."
+    if command -v free &> /dev/null; then
+        FREE_MEM=$(free -h | awk 'NR==2 {print $7}')
+        MEM_PERCENT=$(free | awk 'NR==2 {printf "%.0f", ($3/$2)*100}')
+        DIAG_RESULTS+=("[✓] Свободная память: $FREE_MEM ($MEM_PERCENT% использовано)")
+        
+        if [ "$MEM_PERCENT" -gt 90 ]; then
+            DIAG_WARNINGS+=("[!] Почти нет свободной памяти ($MEM_PERCENT%)")
+            SERVER_PROBLEMS=$((SERVER_PROBLEMS + 1))
+        fi
+    fi
+
+    if command -v df &> /dev/null; then
+        DISK_USAGE=$(df / | awk 'NR==2 {printf "%.0f", ($3/$2)*100}')
+        DISK_FREE=$(df -h / | awk 'NR==2 {print $4}')
+        DIAG_RESULTS+=("[✓] Использование диска: $DISK_USAGE% (свободно: $DISK_FREE)")
+        
+        if [ "$DISK_USAGE" -gt 90 ]; then
+            DIAG_WARNINGS+=("[!] Диск почти полон ($DISK_USAGE%)")
+            SERVER_PROBLEMS=$((SERVER_PROBLEMS + 1))
+        fi
+    fi
+
+    if command -v uptime &> /dev/null; then
+        UPTIME=$(uptime -p 2>/dev/null || uptime | sed 's/.*up //' | sed 's/,.*//')
+        DIAG_RESULTS+=("[✓] Uptime: $UPTIME")
+    fi
+
+    # === ПРОВЕРКА 7: Публичный IP ===
+    echo "Выполняется Проверка 7: Публичный IP..."
+    if command -v hostname &> /dev/null; then
+        SERVER_PUBLIC_IP=$(hostname -I | awk '{print $1}')
+        DIAG_RESULTS+=("[✓] IP сервера: $SERVER_PUBLIC_IP")
+    fi
+
+    # === ПРОВЕРКА 8: Проверка сети пользователя ===
+    echo "Выполняется Проверка 8: Проверка сети пользователя..."
+    PING_RESULT=0
+    
+    if command -v ping &> /dev/null; then
+        if ping -c 1 -W 2 "$USER_IP" &> /dev/null 2>&1; then
+            DIAG_RESULTS+=("[✓] Ping до пользователя успешен")
+        else
+            DIAG_WARNINGS+=("[!] Ping до пользователя не проходит (может быть отключен ICMP)")
+            CLIENT_PROBLEMS=$((CLIENT_PROBLEMS + 1))
+            PING_RESULT=1
+        fi
+    fi
+
+    if [ "$PING_RESULT" -eq 1 ] && command -v tracepath &> /dev/null; then
+        TRACE_RESULT=$(tracepath -m 5 "$USER_IP" 2>&1 | tail -1)
+        if echo "$TRACE_RESULT" | grep -q "no reply\|unreachable"; then
+            DIAG_WARNINGS+=("[!] Маршрут до пользователя может быть заблокирован")
+            CLIENT_PROBLEMS=$((CLIENT_PROBLEMS + 1))
+        fi
+    fi
+
+    # === ПРОВЕРКА 9: Проверка домена ===
+    echo "Выполняется Проверка 9: Проверка домена..."
+    if [ -n "$SERVER_DOMAIN" ]; then
+        if command -v dig &> /dev/null; then
+            DOMAIN_IP=$(dig +short "$SERVER_DOMAIN" A 2>/dev/null | head -1)
+        elif command -v host &> /dev/null; then
+            DOMAIN_IP=$(host "$SERVER_DOMAIN" 2>/dev/null | awk '/has address/ {print $4; exit}')
+        elif command -v nslookup &> /dev/null; then
+            DOMAIN_IP=$(nslookup "$SERVER_DOMAIN" 2>/dev/null | awk '/^Address:/ {print $2; exit}')
+        fi
+
+        if [ -n "$DOMAIN_IP" ]; then
+            if [ "$DOMAIN_IP" == "$SERVER_PUBLIC_IP" ] || [ "$DOMAIN_IP" == "127.0.0.1" ]; then
+                DIAG_RESULTS+=("[✓] Домен $SERVER_DOMAIN указывает на правильный IP")
+            else
+                DIAG_ERRORS+=("[✗] Домен $SERVER_DOMAIN указывает на $DOMAIN_IP (ожидается $SERVER_PUBLIC_IP)")
+                CLIENT_PROBLEMS=$((CLIENT_PROBLEMS + 1))
+            fi
+        else
+            DIAG_WARNINGS+=("[!] Не удалось разрешить домен $SERVER_DOMAIN")
+            CLIENT_PROBLEMS=$((CLIENT_PROBLEMS + 1))
+        fi
+    else
+        DIAG_RESULTS+=("[✓] Домен не указан, пропуск проверки")
+    fi
+
+    # === ПРОВЕРКА 10: Проверка SSL ===
+    echo "Выполняется Проверка 10: Проверка SSL..."
+    if [[ "$CHECK_SSL" =~ ^[Yy]$ ]]; then
+        if command -v openssl &> /dev/null; then
+            SSL_OUTPUT=$(echo "Q" | timeout 5 openssl s_client -connect "$SERVER_PUBLIC_IP:$DIAG_PORT" -servername "${SERVER_DOMAIN:-$SERVER_PUBLIC_IP}" 2>&1)
+            
+            if echo "$SSL_OUTPUT" | grep -q "Verify return code"; then
+                if echo "$SSL_OUTPUT" | grep -q "Verify return code: 0 (ok)"; then
+                    DIAG_RESULTS+=("[✓] SSL сертификат валидный")
+                else
+                    DIAG_ERRORS+=("[✗] SSL сертификат невалидный")
+                    CLIENT_PROBLEMS=$((CLIENT_PROBLEMS + 1))
+                fi
+            fi
+
+            # Проверка срока действия
+            EXPIRY=$(echo "$SSL_OUTPUT" | grep -oP "notAfter=\K.*" | head -1)
+            if [ -n "$EXPIRY" ]; then
+                DIAG_RESULTS+=("[✓] Сертификат действителен до: $EXPIRY")
+            fi
+
+            # Проверка TLS handshake ошибок
+            if echo "$SSL_OUTPUT" | grep -q "handshake failure\|certificate verify failed\|SSLV3_ALERT"; then
+                DIAG_ERRORS+=("[✗] Обнаружены ошибки TLS handshake")
+                CLIENT_PROBLEMS=$((CLIENT_PROBLEMS + 1))
+            fi
+        else
+            DIAG_RESULTS+=("[✓] openssl не найден, пропуск проверки сертификата")
+        fi
+    else
+        DIAG_RESULTS+=("[✓] Проверка SSL пропущена пользователем")
+    fi
+
+    # === ПРОВЕРКА 11: Анализ логов ===
+    echo "Выполняется Проверка 11: Анализ логов..."
+    if command -v docker &> /dev/null; then
+        LOGS=$(docker logs remnanode 2>&1 | tail -50)
+
+        # Поиск различных проблем в логах
+        if echo "$LOGS" | grep -qi "error\|failed"; then
+            ERROR_TYPE=$(echo "$LOGS" | grep -i "error\|failed" | tail -1)
+            DIAG_WARNINGS+=("[!] Обнаружены ошибки в логах")
+        fi
+
+        if echo "$LOGS" | grep -qi "tls\|handshake"; then
+            DIAG_ERRORS+=("[✗] TLS/Handshake ошибки в логах")
+            CLIENT_PROBLEMS=$((CLIENT_PROBLEMS + 1))
+        fi
+
+        if echo "$LOGS" | grep -qi "reality"; then
+            DIAG_ERRORS+=("[✗] REALITY проблемы в логах")
+            CLIENT_PROBLEMS=$((CLIENT_PROBLEMS + 1))
+        fi
+
+        if echo "$LOGS" | grep -qi "connection refused"; then
+            DIAG_ERRORS+=("[✗] Connection refused в логах")
+            SERVER_PROBLEMS=$((SERVER_PROBLEMS + 1))
+        fi
+
+        if echo "$LOGS" | grep -qi "timeout"; then
+            DIAG_WARNINGS+=("[!] Timeout ошибки в логах")
+        fi
+
+        if echo "$LOGS" | grep -qi "certificate.*expired"; then
+            DIAG_ERRORS+=("[✗] SSL сертификат истек")
+            SERVER_PROBLEMS=$((SERVER_PROBLEMS + 1))
+        fi
+
+        if echo "$LOGS" | grep -qi "too many open files"; then
+            DIAG_ERRORS+=("[✗] Слишком много открытых файлов (лимит недостаточный)")
+            SERVER_PROBLEMS=$((SERVER_PROBLEMS + 1))
+        fi
+
+        if [ -z "$(echo "$LOGS" | grep -i "error\|failed\|tls\|reality\|connection refused")" ]; then
+            DIAG_RESULTS+=("[✓] Критических ошибок в логах не обнаружено")
+        fi
+    fi
+
+    # === ВЫВОД РЕЗУЛЬТАТОВ ===
+    echo ""
+    echo "════════════════════════════════════════════════"
+    echo "           РЕЗУЛЬТАТЫ ДИАГНОСТИКИ"
+    echo "════════════════════════════════════════════════"
+    echo ""
+
+    # Успешные проверки
+    if [ ${#DIAG_RESULTS[@]} -gt 0 ]; then
+        for result in "${DIAG_RESULTS[@]}"; do
+            echo "$result"
+        done
+        echo ""
+    fi
+
+    # Предупреждения
+    if [ ${#DIAG_WARNINGS[@]} -gt 0 ]; then
+        for warning in "${DIAG_WARNINGS[@]}"; do
+            echo "$warning"
+        done
+        echo ""
+    fi
+
+    # Ошибки
+    if [ ${#DIAG_ERRORS[@]} -gt 0 ]; then
+        for error in "${DIAG_ERRORS[@]}"; do
+            echo "$error"
+        done
+        echo ""
+    fi
+
+    echo "════════════════════════════════════════════════"
+    echo "              АНАЛИЗ РЕЗУЛЬТАТОВ"
+    echo "════════════════════════════════════════════════"
+    echo ""
+
+    # Расчет вероятностей
+    TOTAL_PROBLEMS=$((SERVER_PROBLEMS + CLIENT_PROBLEMS))
+    
+    if [ "$TOTAL_PROBLEMS" -eq 0 ]; then
+        echo "[✓] Проблем не обнаружено!"
+        echo "Вероятность проблемы на сервере: 0%"
+        echo "Вероятность проблемы у пользователя: 0%"
+        echo ""
+        echo "Все проверки пройдены успешно."
+    else
+        SERVER_PERCENT=$((SERVER_PROBLEMS * 100 / TOTAL_PROBLEMS))
+        CLIENT_PERCENT=$((CLIENT_PROBLEMS * 100 / TOTAL_PROBLEMS))
+
+        echo "Вероятность проблемы на сервере: $SERVER_PERCENT%"
+        echo "Вероятность проблемы у пользователя: $CLIENT_PERCENT%"
+        echo ""
+
+        if [ "$SERVER_PROBLEMS" -gt "$CLIENT_PROBLEMS" ]; then
+            echo "⚠️  Основная проблема, похоже, на СЕРВЕРЕ"
+            echo ""
+            echo "Наиболее вероятные причины:"
+            
+            if echo "${DIAG_ERRORS[@]}" | grep -q "Docker"; then
+                echo "• Docker не установлен или не работает"
+            fi
+            
+            if echo "${DIAG_ERRORS[@]}" | grep -q "остановлен"; then
+                echo "• Контейнер Remnanode остановлен"
+            fi
+            
+            if echo "${DIAG_ERRORS[@]}" | grep -q "не прослушивается"; then
+                echo "• Порт $DIAG_PORT не прослушивается"
+            fi
+            
+            if echo "${DIAG_ERRORS[@]}" | grep -q "firewall\|UFW\|firewalld"; then
+                echo "• Firewall блокирует порт $DIAG_PORT"
+            fi
+            
+            if echo "${DIAG_ERRORS[@]}" | grep -q "истек"; then
+                echo "• SSL сертификат истек"
+            fi
+            
+            if echo "${DIAG_ERRORS[@]}" | grep -q "TLS"; then
+                echo "• Неверный SSL сертификат"
+            fi
+        else
+            echo "⚠️  Основная проблема, похоже, у ПОЛЬЗОВАТЕЛЯ"
+            echo ""
+            echo "Наиболее вероятные причины:"
+            echo "• Неверный publicKey"
+            echo "• Неправильный shortId"
+            echo "• Неверный SNI/serverName"
+            echo "• Неправильный домен в конфигурации"
+            echo "• Блокировка провайдером пользователя"
+            echo "• Неверный dest в конфигурации"
+        fi
+    fi
+
+    echo ""
+    echo "════════════════════════════════════════════════"
+    echo "           РЕКОМЕНДАЦИИ ПО УСТРАНЕНИЮ"
+    echo "════════════════════════════════════════════════"
+    echo ""
+
+    if [ "$SERVER_PROBLEMS" -gt 0 ]; then
+        echo "📋 На сервере:"
+        
+        if echo "${DIAG_ERRORS[@]}" | grep -q "остановлен"; then
+            echo "• Перезапустить контейнер: docker compose restart remnanode"
+        fi
+        
+        if echo "${DIAG_ERRORS[@]}" | grep -q "Docker"; then
+            echo "• Установить Docker: curl -fsSL https://get.docker.com | sh"
+        fi
+        
+        if echo "${DIAG_ERRORS[@]}" | grep -q "firewall\|UFW"; then
+            echo "• Разрешить порт в firewall (UFW): ufw allow $DIAG_PORT/tcp"
+            echo "• Разрешить порт в firewall (firewalld): firewall-cmd --permanent --add-port=$DIAG_PORT/tcp && firewall-cmd --reload"
+        fi
+        
+        if echo "${DIAG_ERRORS[@]}" | grep -q "истек"; then
+            echo "• Обновить SSL сертификат"
+        fi
+        
+        echo "• Проверить логи: docker logs -f remnanode"
+        echo ""
+    fi
+
+    if [ "$CLIENT_PROBLEMS" -gt 0 ]; then
+        echo "📋 У пользователя:"
+        echo "• Проверить конфигурацию клиента (publicKey, shortId, serverName)"
+        echo "• Убедиться, что используется правильный домен или IP"
+        echo "• Проверить параметры VLESS конфигурации"
+        echo "• Попробовать другой DNS сервер (8.8.8.8, 1.1.1.1)"
+        echo "• Проверить, не блокируется ли ISP трафик на порту $DIAG_PORT"
+        echo ""
+    fi
+
+    echo "════════════════════════════════════════════════"
+    echo ""
+    read -p "Нажмите Enter для продолжения..."
+}
+
 # --- Главное меню ---
 main_menu() {
     while true; do
@@ -784,6 +1210,7 @@ main_menu() {
         echo "6. Установить TrafficGuard-auto"
         echo "7. Установить Warp Native"
         echo "8. Проверить и установить обновления"
+        echo "9. Комплексная диагностика Remnanode (VLESS)"
         echo "0. Выход"
         echo "----------------------------"
         read -p "Выберите опцию: " OPTION
@@ -797,8 +1224,9 @@ main_menu() {
             6) install_trafficguard ;;
             7) install_warp_native ;;
             8) check_and_update ;;
+            9) diagnostic_remnanode ;;
             0) echo "Выход из скрипта. До свидания!"; exit 0 ;;
-            *) echo "Неверная опция. Пожалуйста, выберите число от 0 до 8."; read -p "Нажмите Enter для продолжения..." ;;
+            *) echo "Неверная опция. Пожалуйста, выберите число от 0 до 9."; read -p "Нажмите Enter для продолжения..." ;;
         esac
     done
 }
