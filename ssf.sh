@@ -11,7 +11,7 @@
 # 8. Проверить и установить обновления
 # 9. Комплексная диагностика Remnanode (VLESS)
 
-SCRIPT_VERSION="1.1.4"
+SCRIPT_VERSION="1.1.5"
 SCRIPT_NAME="ssf.sh"
 SCRIPT_REPO="https://raw.githubusercontent.com/nickyramma/ssf/main/ssf.sh"
 SCRIPT_PATH="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/$SCRIPT_NAME"
@@ -405,6 +405,22 @@ install_remnanode() {
     REMNANODE_IMAGE="remnawave/node:$REMNANODE_IMAGE_TAG"
     echo "Будет использован образ: $REMNANODE_IMAGE"
 
+    # --- Запрос порта для Remnanode ---
+    echo ""
+    echo "--- Выбор порта для Remnanode ---"
+    read -p "Введите порт для NODE_PORT (по умолчанию '2222', просто нажмите Enter): " NODE_PORT
+    if [ -z "$NODE_PORT" ]; then
+        NODE_PORT="2222"
+    fi
+    echo "Будет использован порт: $NODE_PORT"
+
+    # --- Запрос SECRET_KEY ---
+    echo ""
+    echo "--- Настройка SECRET_KEY ---"
+    echo "Пожалуйста, введите SECRET_KEY для Remnanode."
+    echo "Это критический параметр для безопасности. Если не введете - оставим пустым."
+    read -p "Введите SECRET_KEY: " SECRET_KEY
+    
     # --- Запрос пути для Remnanode ---
     echo ""
     echo "--- Выбор директории для Remnanode ---"
@@ -423,32 +439,26 @@ install_remnanode() {
     
     COMPOSE_FILE="$REMNANODE_PATH/docker-compose.yml"
     
-    cat > "$COMPOSE_FILE" << 'EOF'
+    cat > "$COMPOSE_FILE" << EOF
 version: '3.8'
 
 services:
   remnanode:
-    image: remnawave/node:latest
     container_name: remnanode
-    restart: unless-stopped
-    ports:
-      - "443:443/tcp"
-      - "443:443/udp"
-    volumes:
-      - ./data:/app/data
-      - ./config:/app/config
+    hostname: remnanode
+    image: $REMNANODE_IMAGE
+    network_mode: host
+    cap_add:
+      - NET_ADMIN
+    restart: always
+    ulimits:
+      nofile:
+        soft: 1048576
+        hard: 1048576
     environment:
-      - NODE_ENV=production
-    networks:
-      - remnanode-network
-
-networks:
-  remnanode-network:
-    driver: bridge
+      - NODE_PORT=$NODE_PORT
+      - SECRET_KEY="$SECRET_KEY"
 EOF
-    
-    # Заменяем tag на выбранный пользователем
-    sed -i "s|remnawave/node:latest|$REMNANODE_IMAGE|g" "$COMPOSE_FILE"
     
     echo "Файл docker-compose.yml создан в $REMNANODE_PATH"
     echo ""
@@ -477,6 +487,7 @@ EOF
         echo "✓ Установка Remnanode завершена успешно!"
         echo "Директория установки: $REMNANODE_PATH"
         echo "Образ: $REMNANODE_IMAGE"
+        echo "Порт: $NODE_PORT"
         echo ""
         echo "Для управления Remnanode используйте команды:"
         echo "  Статус: docker-compose -f $COMPOSE_FILE ps"
