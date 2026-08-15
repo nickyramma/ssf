@@ -11,7 +11,7 @@
 # 8. Проверить и установить обновления
 # 9. Комплексная диагностика Remnanode (VLESS)
 
-SCRIPT_VERSION="1.1.5"
+SCRIPT_VERSION="1.1.6"
 SCRIPT_NAME="ssf.sh"
 SCRIPT_REPO="https://raw.githubusercontent.com/nickyramma/ssf/main/ssf.sh"
 SCRIPT_PATH="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/$SCRIPT_NAME"
@@ -440,8 +440,6 @@ install_remnanode() {
     COMPOSE_FILE="$REMNANODE_PATH/docker-compose.yml"
     
     cat > "$COMPOSE_FILE" << EOF
-version: '3.8'
-
 services:
   remnanode:
     container_name: remnanode
