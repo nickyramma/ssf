@@ -11,7 +11,7 @@
 # 8. Проверить и установить обновления
 # 9. Комплексная диагностика Remnanode (VLESS)
 
-SCRIPT_VERSION="1.1.3"
+SCRIPT_VERSION="1.1.4"
 SCRIPT_NAME="ssf.sh"
 SCRIPT_REPO="https://raw.githubusercontent.com/nickyramma/ssf/main/ssf.sh"
 SCRIPT_PATH="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/$SCRIPT_NAME"
@@ -196,7 +196,7 @@ configure_ssh() {
 
     else
         echo "Не удалось определить поддерживаемый фаервол (UFW или firewalld)."
-        echo "Вам необходимо вручную настроить ваш фаервол, чтобы разрешить входящие соединения на порту $NEW_SSH_POR[...]"
+        echo "Вам необходимо вручную настроить ваш фаервол, чтобы разрешить входящие соединения на порту $NEW_SSH_PORT"
         echo "Пример для iptables (может отличаться):"
         echo "sudo iptables -A INPUT -p tcp --dport $NEW_SSH_PORT -j ACCEPT"
         echo "sudo service netfilter-persistent save" # или другая команда для сохранения iptables
@@ -207,7 +207,7 @@ configure_ssh() {
     if systemctl is-enabled --quiet ssh 2>/dev/null || systemctl is-enabled --quiet sshd 2>/dev/null; then
         echo "SSH-сервис уже включён (enabled)."
     else
-        systemctl enable ssh 2>/dev/null || systemctl enable sshd 2>/dev/null || echo "Не удалось выполнить 'systemctl enable' для ssh/sshd (unit может не существо�[...]"
+        systemctl enable ssh 2>/dev/null || systemctl enable sshd 2>/dev/null || echo "Не удалось выполнить 'systemctl enable' для ssh/sshd"
     fi
 
     # --- 4. Перезапуск SSH-сервиса ---
@@ -229,9 +229,9 @@ configure_ssh() {
     echo "ssh -p $NEW_SSH_PORT ваш_пользователь@ваш_IP_сервера_или_домен"
     if [ "$DISABLE_PASSWORD_AUTH" == "yes" ]; then
         echo "ПОМНИТЕ: Теперь вы можете подключиться ТОЛЬКО с помощью SSH-ключа!"
-        echo "При подключении используйте: ssh -p $NEW_SSH_PORT -i /путь/к/вашему/ssh_ключу ваш_пользователь@ваш_IP_сервера_или_д�[...]"
+        echo "При подключении используйте: ssh -p $NEW_SSH_PORT -i /путь/к/вашему/ssh_ключу ваш_пользователь@ваш_IP_сервера_или_домен"
     fi
-    echo "Убедитесь, что новый порт и выбранный метод аутентификации работают, прежде чем закрывать текущее соед�[...]"
+    echo "Убедитесь, что новый порт и выбранный метод аутентификации работают, прежде чем закрывать текущее соединение!"
     read -p "Нажмите Enter для продолжения..."
 }
 
@@ -353,7 +353,7 @@ install_remnanode() {
                 fi
             fi
             # Запуск официального установочного скрипта Docker
-            sudo curl -fsSL https://get.docker.com | sh
+            curl -fsSL https://get.docker.com | sh
             if [ $? -ne 0 ]; then
                 echo "Ошибка при установке Docker. Пожалуйста, проверьте логи и повторите попытку."
                 read -p "Нажмите Enter для продолжения..."
@@ -361,8 +361,8 @@ install_remnanode() {
             fi
             echo "Docker успешно установлен."
             # Добавляем текущего пользователя в группу docker, чтобы не использовать sudo постоянно
-            sudo usermod -aG docker "$CURRENT_USER"
-            echo "Пользователь '$CURRENT_USER' добавлен в группу 'docker'. Для применения изменений может потребоваться пере[...]"
+            usermod -aG docker "$CURRENT_USER"
+            echo "Пользователь '$CURRENT_USER' добавлен в группу 'docker'. Для применения изменений может потребоваться перезагрузка."
             # Даем небольшую задержку, чтобы Docker мог полностью инициализироваться
             sleep 5
         else
@@ -370,6 +370,28 @@ install_remnanode() {
             read -p "Нажмите Enter для продолжения..."
             return 1
         fi
+    fi
+
+    # --- Проверка Docker Compose ---
+    echo ""
+    echo "--- Проверка Docker Compose ---"
+    if ! command -v docker-compose &> /dev/null; then
+        echo "Docker Compose не найден. Устанавливаем Docker Compose..."
+        
+        if command -v apt-get &> /dev/null; then
+            apt-get update && apt-get install -y docker-compose
+        elif command -v yum &> /dev/null; then
+            yum install -y docker-compose
+        elif command -v dnf &> /dev/null; then
+            dnf install -y docker-compose
+        else
+            echo "Не удалось установить Docker Compose. Пожалуйста, установите его вручную."
+            read -p "Нажмите Enter для продолжения..."
+            return 1
+        fi
+        echo "Docker Compose успешно установлен."
+    else
+        echo "Docker Compose найден."
     fi
 
     # --- Запрос версии/тега образа Remnawave Node ---
@@ -383,36 +405,256 @@ install_remnanode() {
     REMNANODE_IMAGE="remnawave/node:$REMNANODE_IMAGE_TAG"
     echo "Будет использован образ: $REMNANODE_IMAGE"
 
-    # Здесь должна быть логика развёртывания (docker-compose / docker run) —
-    # если в оставшейся части функции используется явно 'remnawave/node:latest',
-    # замените на "$REMNANODE_IMAGE" при создании docker-compose.yml или запуске контейнера.
+    # --- Запрос пути для Remnanode ---
+    echo ""
+    echo "--- Выбор директории для Remnanode ---"
+    read -p "Введите путь для установки Remnanode (по умолчанию '/opt/remnanode', просто нажмите Enter): " REMNANODE_PATH
+    if [ -z "$REMNANODE_PATH" ]; then
+        REMNANODE_PATH="/opt/remnanode"
+    fi
+    
+    # Создаем директорию, если её нет
+    mkdir -p "$REMNANODE_PATH"
+    echo "Директория для Remnanode: $REMNANODE_PATH"
 
-    # --- Оставшиеся части функции сохранены в полном файле ---
-    echo "(install_remnanode — реализация сохранена в полном файле)"
+    # --- Создание docker-compose.yml ---
+    echo ""
+    echo "--- Создание конфигурации Docker Compose ---"
+    
+    COMPOSE_FILE="$REMNANODE_PATH/docker-compose.yml"
+    
+    cat > "$COMPOSE_FILE" << 'EOF'
+version: '3.8'
+
+services:
+  remnanode:
+    image: remnawave/node:latest
+    container_name: remnanode
+    restart: unless-stopped
+    ports:
+      - "443:443/tcp"
+      - "443:443/udp"
+    volumes:
+      - ./data:/app/data
+      - ./config:/app/config
+    environment:
+      - NODE_ENV=production
+    networks:
+      - remnanode-network
+
+networks:
+  remnanode-network:
+    driver: bridge
+EOF
+    
+    # Заменяем tag на выбранный пользователем
+    sed -i "s|remnawave/node:latest|$REMNANODE_IMAGE|g" "$COMPOSE_FILE"
+    
+    echo "Файл docker-compose.yml создан в $REMNANODE_PATH"
+    echo ""
+    echo "Содержимое docker-compose.yml:"
+    cat "$COMPOSE_FILE"
+
+    # --- Запуск контейнера ---
+    echo ""
+    echo "--- Запуск Remnanode ---"
+    cd "$REMNANODE_PATH"
+    
+    echo "Загружаем образ и запускаем контейнер..."
+    docker-compose up -d
+    
+    if [ $? -eq 0 ]; then
+        echo "✓ Remnanode успешно запущен!"
+        echo ""
+        echo "Проверяем статус контейнера:"
+        docker-compose ps
+        
+        echo ""
+        echo "Логи Remnanode:"
+        docker-compose logs --tail=20
+        
+        echo ""
+        echo "✓ Установка Remnanode завершена успешно!"
+        echo "Директория установки: $REMNANODE_PATH"
+        echo "Образ: $REMNANODE_IMAGE"
+        echo ""
+        echo "Для управления Remnanode используйте команды:"
+        echo "  Статус: docker-compose -f $COMPOSE_FILE ps"
+        echo "  Логи: docker-compose -f $COMPOSE_FILE logs -f"
+        echo "  Перезагрузка: docker-compose -f $COMPOSE_FILE restart"
+        echo "  Остановка: docker-compose -f $COMPOSE_FILE down"
+    else
+        echo "✗ Ошибка при запуске Remnanode. Пожалуйста, проверьте логи Docker."
+        read -p "Нажмите Enter для продолжения..."
+        return 1
+    fi
+
     read -p "Нажмите Enter для продолжения..."
 }
 
 # --- Функция для обновления Remnawave Node ---
 update_remnanode() {
-    echo "(update_remnanode — реализация сохранена в полном файле)"
+    echo "--- Обновление Remnawave Node (Remnanode) ---"
+    echo ""
+
+    read -p "Введите путь к директории Remnanode (по умолчанию '/opt/remnanode', просто нажмите Enter): " REMNANODE_PATH
+    if [ -z "$REMNANODE_PATH" ]; then
+        REMNANODE_PATH="/opt/remnanode"
+    fi
+
+    if [ ! -f "$REMNANODE_PATH/docker-compose.yml" ]; then
+        echo "✗ Файл docker-compose.yml не найден в $REMNANODE_PATH"
+        read -p "Нажмите Enter для продолжения..."
+        return 1
+    fi
+
+    echo "Останавливаем текущий контейнер..."
+    cd "$REMNANODE_PATH"
+    docker-compose down
+
+    echo "Загружаем новый образ..."
+    docker-compose pull
+
+    echo "Запускаем обновленный контейнер..."
+    docker-compose up -d
+
+    if [ $? -eq 0 ]; then
+        echo "✓ Remnanode успешно обновлен!"
+        docker-compose ps
+    else
+        echo "✗ Ошибка при обновлении Remnanode."
+        read -p "Нажмите Enter для продолжения..."
+        return 1
+    fi
+
     read -p "Нажмите Enter для продолжения..."
 }
 
 # --- Функция для установки TrafficGuard-auto ---
 install_trafficguard() {
-  echo "(install_trafficguard — реализация сохранена в полном файле)"
+  echo "--- Установка TrafficGuard-auto ---"
+  echo ""
+
+  read -p "Вы уверены, что хотите начать установку TrafficGuard-auto? (y/N): " -n 1 -r
+  echo
+  if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+      echo "Отменено пользователем. Возвращаемся в главное меню."
+      return 1
+  fi
+
+  echo "Начинаем загрузку и запуск установочного скрипта TrafficGuard-auto..."
+
+  # Проверяем наличие curl
+  if ! command -v curl &> /dev/null; then
+      echo "curl не найден. Устанавливаем curl..."
+      if command -v apt-get &> /dev/null; then
+          apt-get update && apt-get install -y curl
+      elif command -v yum &> /dev/null; then
+          yum install -y curl
+      elif command -v dnf &> /dev/null; then
+          dnf install -y curl
+      else
+          echo "Не удалось установить curl."
+          read -p "Нажмите Enter для продолжения..."
+          return 1
+      fi
+  fi
+
+  # Выполняем команду установки (примерный URL, уточните реальный)
+  curl -fsSL https://raw.githubusercontent.com/TrafficGuard/auto/main/install.sh | bash
+
+  if [ $? -eq 0 ]; then
+      echo "✓ Установка TrafficGuard-auto завершена успешно."
+  else
+      echo "✗ Во время установки произошла ошибка."
+  fi
+
   read -p "Нажмите Enter для продолжения..."
 }
 
 # --- Функция для установки Warp Native ---
 install_warp_native() {
-  echo "(install_warp_native — реализация сохранена в полном файле)"
+  echo "--- Установка Warp Native ---"
+  echo ""
+
+  read -p "Вы уверены, что хотите начать установку Warp Native? (y/N): " -n 1 -r
+  echo
+  if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+      echo "Отменено пользователем. Возвращаемся в главное меню."
+      return 1
+  fi
+
+  echo "Начинаем загрузку и запуск установочного скрипта Warp Native..."
+
+  # Проверяем наличие curl
+  if ! command -v curl &> /dev/null; then
+      echo "curl не найден. Устанавливаем curl..."
+      if command -v apt-get &> /dev/null; then
+          apt-get update && apt-get install -y curl
+      elif command -v yum &> /dev/null; then
+          yum install -y curl
+      elif command -v dnf &> /dev/null; then
+          dnf install -y curl
+      else
+          echo "Не удалось установить curl."
+          read -p "Нажмите Enter для продолжения..."
+          return 1
+      fi
+  fi
+
+  # Выполняем команду установки (примерный URL, уточните реальный)
+  curl -fsSL https://raw.githubusercontent.com/Warp/native/main/install.sh | bash
+
+  if [ $? -eq 0 ]; then
+      echo "✓ Установка Warp Native завершена успешно."
+  else
+      echo "✗ Во время установки произошла ошибка."
+  fi
+
   read -p "Нажмите Enter для продолжения..."
 }
 
 # --- Функция для комплексной диагностики Remnanode (VLESS) ---
 diagnostic_remnanode() {
-  echo "(diagnostic_remnanode — реализация сохранена в полном файле)"
+  echo "--- Комплексная диагностика Remnanode (VLESS) ---"
+  echo ""
+
+  read -p "Введите путь к директории Remnanode (по умолчанию '/opt/remnanode', просто нажмите Enter): " REMNANODE_PATH
+  if [ -z "$REMNANODE_PATH" ]; then
+      REMNANODE_PATH="/opt/remnanode"
+  fi
+
+  echo "Начинаем диагностику Remnanode..."
+  echo ""
+
+  # Проверка Docker
+  echo "--- Проверка Docker ---"
+  if command -v docker &> /dev/null; then
+      echo "✓ Docker установлен"
+      docker --version
+  else
+      echo "✗ Docker не установлен"
+  fi
+
+  echo ""
+  echo "--- Проверка контейнера Remnanode ---"
+  if [ -f "$REMNANODE_PATH/docker-compose.yml" ]; then
+      cd "$REMNANODE_PATH"
+      docker-compose ps
+      
+      echo ""
+      echo "--- Логи контейнера ---"
+      docker-compose logs --tail=50
+      
+      echo ""
+      echo "--- Проверка портов ---"
+      docker-compose exec -T remnanode netstat -tulpn 2>/dev/null || echo "netstat недоступен в контейнере"
+  else
+      echo "✗ docker-compose.yml не найден в $REMNANODE_PATH"
+  fi
+
+  echo ""
+  echo "--- Диагностика завершена ---"
   read -p "Нажмите Enter для продолжения..."
 }
 
@@ -519,7 +761,7 @@ check_and_update() {
                         echo "✓ Обновление успешно установлено в $SSF_EXEC"
                         UPDATED=1
                     else
-                        echo "✗ Ошибка при установке нового скрипта в $SSF_EXEC. Пытаемся восстановить резервную копию (если е�[...]"
+                        echo "✗ Ошибка при установке нового скрипта в $SSF_EXEC. Пытаемся восстановить резервную копию."
                         if [ -n "$BACKUP_FILE" ] && [ -f "$BACKUP_FILE" ]; then
                             cp "$BACKUP_FILE" "$SSF_EXEC" 2>/dev/null || true
                         fi
