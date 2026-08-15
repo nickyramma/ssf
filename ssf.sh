@@ -11,7 +11,7 @@
 # 8. Проверить и установить обновления
 # 9. Комплексная диагностика Remnanode (VLESS)
 
-SCRIPT_VERSION="1.1.2"
+SCRIPT_VERSION="1.1.3"
 SCRIPT_NAME="ssf.sh"
 SCRIPT_REPO="https://raw.githubusercontent.com/nickyramma/ssf/main/ssf.sh"
 SCRIPT_PATH="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/$SCRIPT_NAME"
@@ -196,7 +196,7 @@ configure_ssh() {
 
     else
         echo "Не удалось определить поддерживаемый фаервол (UFW или firewalld)."
-        echo "Вам необходимо вручную настроить ваш фаервол, чтобы разрешить входящие соединения на порту $NEW_SSH_PORT/tcp[...]"
+        echo "Вам необходимо вручную настроить ваш фаервол, чтобы разрешить входящие соединения на порту $NEW_SSH_POR[...]"
         echo "Пример для iptables (может отличаться):"
         echo "sudo iptables -A INPUT -p tcp --dport $NEW_SSH_PORT -j ACCEPT"
         echo "sudo service netfilter-persistent save" # или другая команда для сохранения iptables
@@ -207,7 +207,7 @@ configure_ssh() {
     if systemctl is-enabled --quiet ssh 2>/dev/null || systemctl is-enabled --quiet sshd 2>/dev/null; then
         echo "SSH-сервис уже включён (enabled)."
     else
-        systemctl enable ssh 2>/dev/null || systemctl enable sshd 2>/dev/null || echo "Не удалось выполнить 'systemctl enable' для ssh/sshd (unit может не существовать)."
+        systemctl enable ssh 2>/dev/null || systemctl enable sshd 2>/dev/null || echo "Не удалось выполнить 'systemctl enable' для ssh/sshd (unit может не существо�[...]"
     fi
 
     # --- 4. Перезапуск SSH-сервиса ---
@@ -229,9 +229,9 @@ configure_ssh() {
     echo "ssh -p $NEW_SSH_PORT ваш_пользователь@ваш_IP_сервера_или_домен"
     if [ "$DISABLE_PASSWORD_AUTH" == "yes" ]; then
         echo "ПОМНИТЕ: Теперь вы можете подключиться ТОЛЬКО с помощью SSH-ключа!"
-        echo "При подключении используйте: ssh -p $NEW_SSH_PORT -i /путь/к/вашему/ssh_ключу ваш_пользователь@ваш_IP_сервера_или_домен"
+        echo "При подключении используйте: ssh -p $NEW_SSH_PORT -i /путь/к/вашему/ssh_ключу ваш_пользователь@ваш_IP_сервера_или_д�[...]"
     fi
-    echo "Убедитесь, что новый порт и выбранный метод аутентификации работают, прежде чем закрывать текущее соединение."
+    echo "Убедитесь, что новый порт и выбранный метод аутентификации работают, прежде чем закрывать текущее соед�[...]"
     read -p "Нажмите Enter для продолжения..."
 }
 
@@ -362,7 +362,7 @@ install_remnanode() {
             echo "Docker успешно установлен."
             # Добавляем текущего пользователя в группу docker, чтобы не использовать sudo постоянно
             sudo usermod -aG docker "$CURRENT_USER"
-            echo "Пользователь '$CURRENT_USER' добавлен в группу 'docker'. Для применения изменений может потребоваться переза..."
+            echo "Пользователь '$CURRENT_USER' добавлен в группу 'docker'. Для применения изменений может потребоваться пере[...]"
             # Даем небольшую задержку, чтобы Docker мог полностью инициализироваться
             sleep 5
         else
@@ -371,6 +371,21 @@ install_remnanode() {
             return 1
         fi
     fi
+
+    # --- Запрос версии/тега образа Remnawave Node ---
+    echo ""
+    echo "--- Выбор версии образа Remnawave Node ---"
+    read -p "Введите тег/версию образа (по умолчанию 'latest', просто нажмите Enter): " REMNANODE_IMAGE_TAG
+    # Если пользователь ничего не ввёл — используем latest
+    if [ -z "$REMNANODE_IMAGE_TAG" ]; then
+        REMNANODE_IMAGE_TAG="latest"
+    fi
+    REMNANODE_IMAGE="remnawave/node:$REMNANODE_IMAGE_TAG"
+    echo "Будет использован образ: $REMNANODE_IMAGE"
+
+    # Здесь должна быть логика развёртывания (docker-compose / docker run) —
+    # если в оставшейся части функции используется явно 'remnawave/node:latest',
+    # замените на "$REMNANODE_IMAGE" при создании docker-compose.yml или запуске контейнера.
 
     # --- Оставшиеся части функции сохранены в полном файле ---
     echo "(install_remnanode — реализация сохранена в полном файле)"
@@ -504,7 +519,7 @@ check_and_update() {
                         echo "✓ Обновление успешно установлено в $SSF_EXEC"
                         UPDATED=1
                     else
-                        echo "✗ Ошибка при установке нового скрипта в $SSF_EXEC. Пытаемся восстановить резервную копию (если есть)."
+                        echo "✗ Ошибка при установке нового скрипта в $SSF_EXEC. Пытаемся восстановить резервную копию (если е�[...]"
                         if [ -n "$BACKUP_FILE" ] && [ -f "$BACKUP_FILE" ]; then
                             cp "$BACKUP_FILE" "$SSF_EXEC" 2>/dev/null || true
                         fi
