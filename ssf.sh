@@ -452,33 +452,76 @@ check_and_update() {
 
             if [[ $REPLY =~ ^[Yy]$ ]]; then
                 echo "Устанавливаем обновление..."
-                SSF_EXEC=$(command -v ssf 2>/dev/null)
-                if [ -z "$SSF_EXEC" ]; then
-                    SSF_EXEC="/usr/local/bin/ssf"
-                fi
 
-                if [ -f "$SSF_EXEC" ]; then
-                    BACKUP_FILE="${SSF_EXEC}.bak_$(date +%Y%m%d_%H%M%S)"
-                    cp "$SSF_EXEC" "$BACKUP_FILE"
-                    echo "✓ Резервная копия создана: $BACKUP_FILE"
-                fi
+                # Сначала пытаемся обновить сам файл, из которого запущен скрипт (обновление на месте)
+                TARGET_ON_PLACE="$SCRIPT_PATH"
+                UPDATED=0
 
-                install -m 755 "$TEMP_SCRIPT" "$SSF_EXEC" 2>/dev/null
-                if [ $? -ne 0 ]; then
-                    echo "✗ Ошибка при установке нового скрипта в $SSF_EXEC. Пытаемся восстановить резервную копию (если есть)."
-                    if [ -n "$BACKUP_FILE" ] && [ -f "$BACKUP_FILE" ]; then
-                        cp "$BACKUP_FILE" "$SSF_EXEC"
+                if [ -f "$TARGET_ON_PLACE" ] && [ -w "$TARGET_ON_PLACE" ]; then
+                    echo "Пытаемся установить обновление в $TARGET_ON_PLACE (файл, из которого запущен скрипт)..."
+                    BACKUP_FILE="${TARGET_ON_PLACE}.bak_$(date +%Y%m%d_%H%M%S)"
+                    cp "$TARGET_ON_PLACE" "$BACKUP_FILE" 2>/dev/null || true
+                    if install -m 755 "$TEMP_SCRIPT" "$TARGET_ON_PLACE" 2>/dev/null; then
+                        echo "✓ Обновление успешно установлено в $TARGET_ON_PLACE"
+                        SSF_EXEC="$TARGET_ON_PLACE"
+                        UPDATED=1
+                    else
+                        echo "⚠ Не удалось записать в $TARGET_ON_PLACE. Восстанавливаем резервную копию (если есть)."
+                        if [ -f "$BACKUP_FILE" ]; then
+                            cp "$BACKUP_FILE" "$TARGET_ON_PLACE" 2>/dev/null || true
+                        fi
                     fi
-                    rm -f "$TEMP_SCRIPT"
+                else
+                    # Если файла нет или он не записываемый — проверим возможность записи в директорию
+                    if [ ! -f "$TARGET_ON_PLACE" ] && [ -w "$(dirname "$TARGET_ON_PLACE")" ]; then
+                        echo "Файл $TARGET_ON_PLACE не существует, но директория доступна для записи. Устанавливаем туда..."
+                        if install -m 755 "$TEMP_SCRIPT" "$TARGET_ON_PLACE" 2>/dev/null; then
+                            echo "✓ Обновление успешно установлено в $TARGET_ON_PLACE"
+                            SSF_EXEC="$TARGET_ON_PLACE"
+                            UPDATED=1
+                        else
+                            echo "⚠ Не удалось установить в $TARGET_ON_PLACE."
+                        fi
+                    else
+                        echo "Не удалось установить на месте (нет прав на запись или файл защищён)."
+                    fi
+                fi
+
+                # Если обновление на месте не удалось — пробуем установить в /usr/local/bin/ssf или существующий ssf
+                if [ $UPDATED -eq 0 ]; then
+                    SSF_EXEC=$(command -v ssf 2>/dev/null)
+                    if [ -z "$SSF_EXEC" ]; then
+                        SSF_EXEC="/usr/local/bin/ssf"
+                    fi
+
+                    if [ -f "$SSF_EXEC" ]; then
+                        BACKUP_FILE="${SSF_EXEC}.bak_$(date +%Y%m%d_%H%M%S)"
+                        cp "$SSF_EXEC" "$BACKUP_FILE" 2>/dev/null || true
+                    fi
+
+                    echo "Устанавливаем обновление в $SSF_EXEC ..."
+                    if install -m 755 "$TEMP_SCRIPT" "$SSF_EXEC" 2>/dev/null; then
+                        echo "✓ Обновление успешно установлено в $SSF_EXEC"
+                        UPDATED=1
+                    else
+                        echo "✗ Ошибка при установке нового скрипта в $SSF_EXEC. Пытаемся восстановить резервную копию (если есть)."
+                        if [ -n "$BACKUP_FILE" ] && [ -f "$BACKUP_FILE" ]; then
+                            cp "$BACKUP_FILE" "$SSF_EXEC" 2>/dev/null || true
+                        fi
+                    fi
+                fi
+
+                rm -f "$TEMP_SCRIPT"
+
+                if [ $UPDATED -eq 1 ]; then
+                    echo "Запускаем новую версию ssf..."
+                    # Заменяем текущий процесс новой версией и передаём аргументы
+                    exec "$SSF_EXEC" "$@"
+                else
+                    echo "✗ Не удалось установить обновление ни в $TARGET_ON_PLACE, ни в $SSF_EXEC."
                     read -p "Нажмите Enter для продолжения..."
                     return 1
                 fi
-
-                echo "✓ Обновление установлено в $SSF_EXEC"
-                rm -f "$TEMP_SCRIPT"
-
-                echo "Запускаем новую версию ssf..."
-                exec "$SSF_EXEC" "$@"
             else
                 echo "Обновление отменено пользователем."
                 rm -f "$TEMP_SCRIPT"
