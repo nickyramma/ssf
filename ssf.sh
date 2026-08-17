@@ -47,7 +47,8 @@ configure_ssh() {
     echo ""
 
     while true; do
-        read -p "Отключить вход по паролю и разрешить только вход по SSH-ключам? (y/N): " -n 1 -r REPLY_PASSWORD_AUTH
+        printf "Отключить вход по паролю и разрешить только вход по SSH-ключам? (y/N): "
+        read -r REPLY_PASSWORD_AUTH
         echo # (добавляем новую строку после ввода)
         if [[ "$REPLY_PASSWORD_AUTH" =~ ^[Yy]$ ]]; then
             DISABLE_PASSWORD_AUTH="yes"
@@ -68,7 +69,8 @@ configure_ssh() {
                 echo "Получен SSH-ключ. Он будет добавлен для пользователя '$CURRENT_USER'."
             else
                 echo "SSH-ключ не был введен. Если вы отключите парольный вход без ключа, вы можете потерять доступ!"
-                read -p "Вы уверены, что хотите продолжить без добавления ключа? (y/N): " -n 1 -r CONFIRM_NO_KEY
+                printf "Вы уверены, что хотите продолжить без добавления ключа? (y/N): "
+                read -r CONFIRM_NO_KEY
                 echo
                 if [[ ! $CONFIRM_NO_KEY =~ ^[Yy]$ ]]; then
                     echo "Отменено пользователем. Возвращаемся в главное меню."
@@ -95,7 +97,8 @@ configure_ssh() {
     elif [ "$DISABLE_PASSWORD_AUTH" == "yes" ] && [ -z "$SSH_PUBLIC_KEY" ]; then
         echo "ВНИМАНИЕ: SSH-ключ НЕ БУДЕТ добавлен. Убедитесь, что он уже настроен!"
     fi
-    read -p "Вы уверены, что хотите применить эти изменения? (y/N): " -n 1 -r
+    printf "Вы уверены, что хотите применить эти изменения? (y/N): "
+    read -r REPLY
     echo # (добавляем новую строку после ввода)
     if [[ ! $REPLY =~ ^[Yy]$ ]]; then
         echo "Отменено пользователем. Возвращаемся в главное меню."
@@ -229,9 +232,9 @@ configure_ssh() {
     echo "ssh -p $NEW_SSH_PORT ваш_пользователь@ваш_IP_сервера_или_домен"
     if [ "$DISABLE_PASSWORD_AUTH" == "yes" ]; then
         echo "ПОМНИТЕ: Теперь вы можете подключиться ТОЛЬКО с помощью SSH-ключа!"
-        echo "При подключении используйте: ssh -p $NEW_SSH_PORT -i /путь/к/вашему/ssh_ключу ваш_пользователь@ваш_IP_сервера_ил�[...]"
+        echo "При подключении используйте: ssh -p $NEW_SSH_PORT -i /путь/к/вашему/ssh_ключу ваш_пользователь@ваш_IP_сервера_ил..."
     fi
-    echo "Убедитесь, что новый порт и выбранный метод аутентификации работают, прежде чем закрывать текущее со[...]
+    echo "Убедитесь, что новый порт и выбранный метод аутентификации работают, прежде чем закрывать текущее со..."
     read -p "Нажмите Enter для продолжения..."
 }
 
@@ -240,7 +243,8 @@ disable_icmp_ping() {
     echo "--- Отключение ICMP Ping ---"
     echo "Это сделает ваш сервер менее заметным для сканирования."
 
-    read -p "Вы уверены, что хотите отключить ICMP Ping? (y/N): " -n 1 -r
+    printf "Вы уверены, что хотите отключить ICMP Ping? (y/N): "
+    read -r REPLY
     echo
     if [[ ! $REPLY =~ ^[Yy]$ ]]; then
         echo "Отменено пользователем. Возвращаемся в главное меню."
@@ -334,7 +338,8 @@ disable_icmp_ping() {
 install_donmatteovpn() {
     echo "--- Установка Reshala-Remnawave-Bedolaga (DonMatteoVPN) ---"
 
-    read -p "Вы уверены, что хотите начать установку скрипта DonMatteoVPN? (y/N): " -n 1 -r
+    printf "Вы уверены, что хотите начать установку скрипта DonMatteoVPN? (y/N): "
+    read -r REPLY
     echo
     if [[ ! $REPLY =~ ^[Yy]$ ]]; then
         echo "Отменено пользователем. Возвращаемся в главное меню."
@@ -380,7 +385,8 @@ install_remnanode() {
     echo "Для установки Remnanode требуется Docker и Docker Compose."
     echo ""
 
-    read -p "Вы уверены, что хотите начать установку Remnanode? (y/N): " -n 1 -r
+    printf "Вы уверены, что хотите начать установку Remnanode? (y/N): "
+    read -r REPLY
     echo
     if [[ ! $REPLY =~ ^[Yy]$ ]]; then
         echo "Отменено пользователем. Возвращаемся в главное меню."
@@ -390,7 +396,8 @@ install_remnanode() {
     # --- Проверка и установка Docker ---
     if ! command -v docker &> /dev/null; then
         echo "Docker не найден. Предлагаем установить Docker."
-        read -p "Установить Docker сейчас? (y/N): " -n 1 -r INSTALL_DOCKER_REPLY
+        printf "Установить Docker сейчас? (y/N): "
+        read -r INSTALL_DOCKER_REPLY
         echo
         if [[ "$INSTALL_DOCKER_REPLY" =~ ^[Yy]$ ]]; then
             echo "Начинаем установку Docker..."
@@ -419,7 +426,7 @@ install_remnanode() {
             echo "Docker успешно установлен."
             # Добавляем текущего пользователя в группу docker, чтобы не использовать sudo постоянно
             usermod -aG docker "$CURRENT_USER"
-            echo "Пользователь '$CURRENT_USER' добавлен в группу 'docker'. Для применения изменений может потребоваться переза�[...]"
+            echo "Пользователь '$CURRENT_USER' добавлен в группу 'docker'. Для применения изменений может потребоваться пере..."
             # Даем небольшую задержку, чтобы Docker мог полностью инициализироваться
             sleep 5
         else
