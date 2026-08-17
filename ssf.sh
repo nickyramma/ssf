@@ -11,7 +11,7 @@
 # 8. Проверить и установить обновления
 # 9. Комплексная диагностика Remnanode (VLESS)
 
-SCRIPT_VERSION="1.1.7"
+SCRIPT_VERSION="1.1.8"
 SCRIPT_NAME="ssf.sh"
 SCRIPT_REPO="https://raw.githubusercontent.com/nickyramma/ssf/main/ssf.sh"
 SCRIPT_PATH="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/$SCRIPT_NAME"
@@ -47,9 +47,9 @@ configure_ssh() {
     echo ""
 
     while true; do
-        printf "Отключить вход по паролю и разрешить только вход по SSH-ключам? (y/N): "
+        printf 'Отключить вход по паролю и разрешить только вход по SSH-ключам? (y/N): '
         read -r REPLY_PASSWORD_AUTH
-        echo # (добавляем новую строку после ввода)
+        echo
         if [[ "$REPLY_PASSWORD_AUTH" =~ ^[Yy]$ ]]; then
             DISABLE_PASSWORD_AUTH="yes"
             echo "Вход по паролю будет отключен. Убедитесь, что у вас настроен вход по SSH-ключам!"
@@ -69,7 +69,7 @@ configure_ssh() {
                 echo "Получен SSH-ключ. Он будет добавлен для пользователя '$CURRENT_USER'."
             else
                 echo "SSH-ключ не был введен. Если вы отключите парольный вход без ключа, вы можете потерять доступ!"
-                printf "Вы уверены, что хотите продолжить без добавления ключа? (y/N): "
+                printf 'Вы уверены, что хотите продолжить без добавления ключа? (y/N): '
                 read -r CONFIRM_NO_KEY
                 echo
                 if [[ ! $CONFIRM_NO_KEY =~ ^[Yy]$ ]]; then
@@ -97,9 +97,9 @@ configure_ssh() {
     elif [ "$DISABLE_PASSWORD_AUTH" == "yes" ] && [ -z "$SSH_PUBLIC_KEY" ]; then
         echo "ВНИМАНИЕ: SSH-ключ НЕ БУДЕТ добавлен. Убедитесь, что он уже настроен!"
     fi
-    printf "Вы уверены, что хотите применить эти изменения? (y/N): "
+    printf 'Вы уверены, что хотите применить эти изменения? (y/N): '
     read -r REPLY
-    echo # (добавляем новую строку после ввода)
+    echo
     if [[ ! $REPLY =~ ^[Yy]$ ]]; then
         echo "Отменено пользователем. Возвращаемся в главное меню."
         return 1 # Возвращаемся в меню
@@ -199,7 +199,7 @@ configure_ssh() {
 
     else
         echo "Не удалось определить поддерживаемый фаервол (UFW или firewalld)."
-        echo "Вам необходимо вручную настроить ваш фаервол, чтобы разрешить входящие соединения на порту $NEW_SSH_POR[...]"
+        echo "Вам необходимо вручную настроить ваш фаервол, чтобы разрешить входящие соединения на порту $NEW_SSH_PORT"
         echo "Пример для iptables (может отличаться):"
         echo "sudo iptables -A INPUT -p tcp --dport $NEW_SSH_PORT -j ACCEPT"
         echo "sudo service netfilter-persistent save" # или другая команда для сохранения iptables
@@ -232,9 +232,9 @@ configure_ssh() {
     echo "ssh -p $NEW_SSH_PORT ваш_пользователь@ваш_IP_сервера_или_домен"
     if [ "$DISABLE_PASSWORD_AUTH" == "yes" ]; then
         echo "ПОМНИТЕ: Теперь вы можете подключиться ТОЛЬКО с помощью SSH-ключа!"
-        echo "При подключении используйте: ssh -p $NEW_SSH_PORT -i /путь/к/вашему/ssh_ключу ваш_пользователь@ваш_IP_сервера_ил..."
+        echo "При подключении используйте: ssh -p $NEW_SSH_PORT -i /путь/к/вашему/ssh_ключу ваш_пользователь@ваш_IP_сервера_или_домен"
     fi
-    echo "Убедитесь, что новый порт и выбранный метод аутентификации работают, прежде чем закрывать текущее со..."
+    echo "Убедитесь, что новый порт и выбранный метод аутентификации работают, прежде чем закрывать текущее соединение."
     read -p "Нажмите Enter для продолжения..."
 }
 
@@ -243,7 +243,7 @@ disable_icmp_ping() {
     echo "--- Отключение ICMP Ping ---"
     echo "Это сделает ваш сервер менее заметным для сканирования."
 
-    printf "Вы уверены, что хотите отключить ICMP Ping? (y/N): "
+    printf 'Вы уверены, что хотите отключить ICMP Ping? (y/N): '
     read -r REPLY
     echo
     if [[ ! $REPLY =~ ^[Yy]$ ]]; then
@@ -338,7 +338,7 @@ disable_icmp_ping() {
 install_donmatteovpn() {
     echo "--- Установка Reshala-Remnawave-Bedolaga (DonMatteoVPN) ---"
 
-    printf "Вы уверены, что хотите начать установку скрипта DonMatteoVPN? (y/N): "
+    printf 'Вы уверены, что хотите начать установку скрипта DonMatteoVPN? (y/N): '
     read -r REPLY
     echo
     if [[ ! $REPLY =~ ^[Yy]$ ]]; then
@@ -385,7 +385,7 @@ install_remnanode() {
     echo "Для установки Remnanode требуется Docker и Docker Compose."
     echo ""
 
-    printf "Вы уверены, что хотите начать установку Remnanode? (y/N): "
+    printf 'Вы уверены, что хотите начать установку Remnanode? (y/N): '
     read -r REPLY
     echo
     if [[ ! $REPLY =~ ^[Yy]$ ]]; then
@@ -396,7 +396,7 @@ install_remnanode() {
     # --- Проверка и установка Docker ---
     if ! command -v docker &> /dev/null; then
         echo "Docker не найден. Предлагаем установить Docker."
-        printf "Установить Docker сейчас? (y/N): "
+        printf 'Установить Docker сейчас? (y/N): '
         read -r INSTALL_DOCKER_REPLY
         echo
         if [[ "$INSTALL_DOCKER_REPLY" =~ ^[Yy]$ ]]; then
@@ -426,7 +426,7 @@ install_remnanode() {
             echo "Docker успешно установлен."
             # Добавляем текущего пользователя в группу docker, чтобы не использовать sudo постоянно
             usermod -aG docker "$CURRENT_USER"
-            echo "Пользователь '$CURRENT_USER' добавлен в группу 'docker'. Для применения изменений может потребоваться пере..."
+            echo "Пользователь '$CURRENT_USER' добавлен в группу 'docker'. Для применения изменений может потребоваться пере-вход в систему."
             # Даем небольшую задержку, чтобы Docker мог полностью инициализироваться
             sleep 5
         else
@@ -458,4 +458,480 @@ install_remnanode() {
         echo "Docker Compose найден."
     fi
 
-# (rest of file unchanged)
+    # --- Запрос версии/тега образа Remnawave Node ---
+    echo ""
+    echo "--- Выбор версии образа Remnawave Node ---"
+    read -p "Введите тег/версию образа (по умолчанию 'latest', просто нажмите Enter): " REMNANODE_IMAGE_TAG
+    # Если пользователь ничего не ввёл — используем latest
+    if [ -z "$REMNANODE_IMAGE_TAG" ]; then
+        REMNANODE_IMAGE_TAG="latest"
+    fi
+    REMNANODE_IMAGE="remnawave/node:$REMNANODE_IMAGE_TAG"
+    echo "Будет использован образ: $REMNANODE_IMAGE"
+
+    # --- Запрос порта для Remnanode ---
+    echo ""
+    echo "--- Выбор порта для Remnanode ---"
+    read -p "Введите порт для NODE_PORT (по умолчанию '2222', просто нажмите Enter): " NODE_PORT
+    if [ -z "$NODE_PORT" ]; then
+        NODE_PORT="2222"
+    fi
+    echo "Будет использован порт: $NODE_PORT"
+
+    # --- Запрос SECRET_KEY ---
+    echo ""
+    echo "--- Настройка SECRET_KEY ---"
+    echo "Пожалуйста, введите SECRET_KEY для Remnanode."
+    echo "Это критический параметр для безопасности. Если не введете - оставим пустым."
+    read -p "Введите SECRET_KEY: " SECRET_KEY
+    
+    # --- Запрос пути для Remnanode ---
+    echo ""
+    echo "--- Выбор директории для Remnanode ---"
+    read -p "Введите путь для установки Remnanode (по умолчанию '/opt/remnanode', просто нажмите Enter): " REMNANODE_PATH
+    if [ -z "$REMNANODE_PATH" ]; then
+        REMNANODE_PATH="/opt/remnanode"
+    fi
+    
+    # Создаем директорию, если её нет
+    mkdir -p "$REMNANODE_PATH"
+    echo "Директория для Remnanode: $REMNANODE_PATH"
+
+    # --- Создание docker-compose.yml ---
+    echo ""
+    echo "--- Создание конфигурации Docker Compose ---"
+    
+    COMPOSE_FILE="$REMNANODE_PATH/docker-compose.yml"
+    
+    cat > "$COMPOSE_FILE" << EOF
+services:
+  remnanode:
+    container_name: remnanode
+    hostname: remnanode
+    image: $REMNANODE_IMAGE
+    network_mode: host
+    cap_add:
+      - NET_ADMIN
+    restart: always
+    ulimits:
+      nofile:
+        soft: 1048576
+        hard: 1048576
+    environment:
+      - NODE_PORT=$NODE_PORT
+      - SECRET_KEY="$SECRET_KEY"
+EOF
+    
+    echo "Файл docker-compose.yml создан в $REMNANODE_PATH"
+    echo ""
+    echo "Содержимое docker-compose.yml:"
+    cat "$COMPOSE_FILE"
+
+    # --- Запуск контейнера ---
+    echo ""
+    echo "--- Запуск Remnanode ---"
+    cd "$REMNANODE_PATH"
+    
+    echo "Загружаем образ и запускаем контейнер..."
+    docker-compose up -d
+    
+    if [ $? -eq 0 ]; then
+        echo "✓ Remnanode успешно запущен!"
+        echo ""
+        echo "Проверяем статус контейнера:"
+        docker-compose ps
+        
+        echo ""
+        echo "Логи Remnanode:"
+        docker-compose logs --tail=20
+        
+        echo ""
+        echo "✓ Установка Remnanode завершена успешно!"
+        echo "Директория установки: $REMNANODE_PATH"
+        echo "Образ: $REMNANODE_IMAGE"
+        echo "Порт: $NODE_PORT"
+        echo ""
+        echo "Для управления Remnanode используйте команды:"
+        echo "  Статус: docker-compose -f $COMPOSE_FILE ps"
+        echo "  Логи: docker-compose -f $COMPOSE_FILE logs -f"
+        echo "  Перезагрузка: docker-compose -f $COMPOSE_FILE restart"
+        echo "  Остановка: docker-compose -f $COMPOSE_FILE down"
+    else
+        echo "✗ Ошибка при запуске Remnanode. Пожалуйста, проверьте логи Docker."
+        read -p "��ажмите Enter для продолжения..."
+        return 1
+    fi
+
+    read -p "Нажмите Enter для продолжения..."
+}
+
+# --- Функция для обновления Remnawave Node ---
+update_remnanode() {
+    echo "--- Обновление Remnawave Node (Remnanode) ---"
+    echo ""
+
+    read -p "Введите путь к директории Remnanode (по умолчанию '/opt/remnanode', просто нажмите Enter): " REMNANODE_PATH
+    if [ -z "$REMNANODE_PATH" ]; then
+        REMNANODE_PATH="/opt/remnanode"
+    fi
+
+    if [ ! -f "$REMNANODE_PATH/docker-compose.yml" ]; then
+        echo "✗ Файл docker-compose.yml не найден в $REMNANODE_PATH"
+        read -p "Нажмите Enter для продолжения..."
+        return 1
+    fi
+
+    echo "Останавливаем текущий контейнер..."
+    cd "$REMNANODE_PATH"
+    docker-compose down
+
+    echo "Загружаем новый образ..."
+    docker-compose pull
+
+    echo "Запускаем обновленный контейнер..."
+    docker-compose up -d
+
+    if [ $? -eq 0 ]; then
+        echo "✓ Remnanode успешно обновлен!"
+        docker-compose ps
+    else
+        echo "✗ Ошибка при обновлении Remnanode."
+        read -p "Нажмите Enter для продолжения..."
+        return 1
+    fi
+
+    read -p "Нажмите Enter для продолжения..."
+}
+
+# --- Функция для установки TrafficGuard-auto ---
+install_trafficguard() {
+  echo "--- Установка TrafficGuard-auto ---"
+  echo ""
+
+  printf 'Вы уверены, что хотите начать установку TrafficGuard-auto? (y/N): '
+  read -r REPLY
+  echo
+  if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+      echo "Отменено пользователем. Возвращаемся в главное меню."
+      return 1
+  fi
+
+  echo "Начинаем загрузку и запуск установочного скрипта TrafficGuard-auto..."
+
+  # Проверяем наличие curl
+  if ! command -v curl &> /dev/null; then
+      echo "curl не найден. Устанавливаем curl..."
+      if command -v apt-get &> /dev/null; then
+          apt-get update && apt-get install -y curl
+      elif command -v yum &> /dev/null; then
+          yum install -y curl
+      elif command -v dnf &> /dev/null; then
+          dnf install -y curl
+      else
+          echo "Не удалось установить curl."
+          read -p "Нажмите Enter для продолжения..."
+          return 1
+      fi
+  fi
+
+  # Выполняем команду установки (примерный URL, уточните реальный)
+  curl -fsSL https://raw.githubusercontent.com/TrafficGuard/auto/main/install.sh | bash
+
+  if [ $? -eq 0 ]; then
+      echo "✓ Установка TrafficGuard-auto завершена успешно."
+  else
+      echo "✗ Во время установки произошла ошибка."
+  fi
+
+  read -p "Нажмите Enter для продолжения..."
+}
+
+# --- Функция для установки Warp Native ---
+install_warp_native() {
+  echo "--- Установка Warp Native ---"
+  echo ""
+
+  printf 'Вы уверены, что хотите начать установку Warp Native? (y/N): '
+  read -r REPLY
+  echo
+  if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+      echo "Отменено пользователем. Возвращаемся в главное меню."
+      return 1
+  fi
+
+  echo "Начинаем загрузку и запуск установочного скрипта Warp Native..."
+
+  # Проверяем наличие curl
+  if ! command -v curl &> /dev/null; then
+      echo "curl не найден. Устанавливаем curl..."
+      if command -v apt-get &> /dev/null; then
+          apt-get update && apt-get install -y curl
+      elif command -v yum &> /dev/null; then
+          yum install -y curl
+      elif command -v dnf &> /dev/null; then
+          dnf install -y curl
+      else
+          echo "Не удалось установить curl."
+          read -p "Нажмите Enter для продолжения..."
+          return 1
+      fi
+  fi
+
+  # Выполняем команду установки (примерный URL, уточните реальный)
+  curl -fsSL https://raw.githubusercontent.com/Warp/native/main/install.sh | bash
+
+  if [ $? -eq 0 ]; then
+      echo "✓ Установка Warp Native завершена успешно."
+  else
+      echo "✗ Во время установки произошла ошибка."
+  fi
+
+  read -p "Нажмите Enter для продолжения..."
+}
+
+# --- Функция для комплексной диагностики Remnanode (VLESS) ---
+diagnostic_remnanode() {
+  echo "--- Комплексная диагностика Remnanode (VLESS) ---"
+  echo ""
+
+  read -p "Введите путь к директории Remnanode (по умолчанию '/opt/remnanode', просто нажмите Enter): " REMNANODE_PATH
+  if [ -z "$REMNANODE_PATH" ]; then
+      REMNANODE_PATH="/opt/remnanode"
+  fi
+
+  echo "Начинаем диагностику Remnanode..."
+  echo ""
+
+  # Проверка Docker
+  echo "--- Проверка Docker ---"
+  if command -v docker &> /dev/null; then
+      echo "✓ Docker установлен"
+      docker --version
+  else
+      echo "✗ Docker не установлен"
+  fi
+
+  echo ""
+  echo "--- Проверка контейнера Remnanode ---"
+  if [ -f "$REMNANODE_PATH/docker-compose.yml" ]; then
+      cd "$REMNANODE_PATH"
+      docker-compose ps
+      
+      echo ""
+      echo "--- Логи контейнера ---"
+      docker-compose logs --tail=50
+      
+      echo ""
+      echo "--- Проверка портов ---"
+      docker-compose exec -T remnanode netstat -tulpn 2>/dev/null || echo "netstat недоступен в контейнере"
+  else
+      echo "✗ docker-compose.yml не найден в $REMNANODE_PATH"
+  fi
+
+  echo ""
+  echo "--- Диагностика завершена ---"
+  read -p "Нажмите Enter для продолжения..."
+}
+
+# --- Функция для проверки и установки обновлений ---
+check_and_update() {
+    echo "--- Проверка и установка обновлений ---"
+    echo "Текущая версия скрипта: $SCRIPT_VERSION"
+    echo ""
+
+    if ! command -v curl &> /dev/null; then
+        echo "curl не найден. Устанавливаем curl..."
+        if command -v apt-get &> /dev/null; then
+            apt-get update && apt-get install -y curl
+        elif command -v yum &> /dev/null; then
+            yum install -y curl
+        elif command -v dnf &> /dev/null; then
+            dnf install -y curl
+        else
+            echo "Не удалось установить curl. Невозможно проверить обновления."
+            read -p "Нажмите Enter для продолжения..."
+            return 1
+        fi
+    fi
+
+    TEMP_SCRIPT="/tmp/ssf_new.sh"
+    echo "Загрузка новой версии в временный файл $TEMP_SCRIPT..."
+    if curl -fsSL -o "$TEMP_SCRIPT" "$SCRIPT_REPO"; then
+        echo "✓ Скрипт успешно загружен в $TEMP_SCRIPT."
+
+        # проверяем размер и содержимое
+        FILESIZE=$(stat -c%s "$TEMP_SCRIPT" 2>/dev/null || echo 0)
+        if [ "$FILESIZE" -lt 200 ]; then
+            echo "✗ Загруженный файл слишком маленький ( $FILESIZE bytes ). Отменяем обновление."
+            rm -f "$TEMP_SCRIPT"
+            read -p "Нажмите Enter для продолжения..."
+            return 1
+        fi
+
+        # Проверяем синтаксис новой копии
+        if ! bash -n "$TEMP_SCRIPT" 2>/tmp/ssf_syntax_err.txt; then
+            echo "✗ Синтаксическая ошибка в загруженном скрипте. Обновление отменено."
+            echo "Сводка ошибки:"
+            sed -n '1,200p' /tmp/ssf_syntax_err.txt
+            rm -f "$TEMP_SCRIPT" /tmp/ssf_syntax_err.txt
+            read -p "Нажмите Enter для продолжения..."
+            return 1
+        fi
+
+        NEW_VERSION=$(grep "^SCRIPT_VERSION=" "$TEMP_SCRIPT" | head -n1 | cut -d'"' -f2)
+        if [ -z "$NEW_VERSION" ]; then
+            echo "⚠ Не удалось определить версию нового скрипта. Обновление отменено."
+            rm -f "$TEMP_SCRIPT"
+            read -p "Нажмите Enter для продолжения..."
+            return 1
+        fi
+
+        echo "Доступная версия на GitHub: $NEW_VERSION"
+
+        if [ "$NEW_VERSION" == "$SCRIPT_VERSION" ]; then
+            echo "✓ Вы используете последнюю версию скрипта."
+            rm -f "$TEMP_SCRIPT"
+            read -p "Нажмите Enter для продолжения..."
+            return 0
+        fi
+
+        echo ""
+        echo "⚡ Доступно обновление!"
+        echo "Текущая версия: $SCRIPT_VERSION"
+        echo "Новая версия:   $NEW_VERSION"
+        echo ""
+
+        printf 'Хотите установить обновление? (y/N): '
+        read -r REPLY
+        echo
+
+        if [[ $REPLY =~ ^[Yy]$ ]]; then
+            echo "Устанавливаем обновление..."
+
+            # Подготовка целевого пути и резервной копии
+            TARGET_ON_PLACE="$SCRIPT_PATH"
+            UPDATED=0
+
+            # Всегда проверяем синтаксис уже скачанного файла (ещё раз) и размер
+            if bash -n "$TEMP_SCRIPT" 2>/dev/null; then
+                # Если текущий файл существует, создаём резервную копию
+                if [ -f "$TARGET_ON_PLACE" ]; then
+                    BACKUP_FILE="${TARGET_ON_PLACE}.bak_$(date +%Y%m%d_%H%M%S)"
+                    cp -p "$TARGET_ON_PLACE" "$BACKUP_FILE" 2>/dev/null || true
+                fi
+
+                # Копируем временный файл в целевое место атомарно
+                if install -m 755 "$TEMP_SCRIPT" "$TARGET_ON_PLACE" 2>/dev/null; then
+                    echo "✓ Обновление успешно установлено в $TARGET_ON_PLACE"
+                    UPDATED=1
+                    SSF_EXEC="$TARGET_ON_PLACE"
+                else
+                    echo "⚠ Не удалось записать в $TARGET_ON_PLACE. Проверяем /usr/local/bin/ssf..."
+                fi
+            else
+                echo "✗ Новая версия не прошла синтаксическую проверку. Обновление отменено."
+            fi
+
+            # Если обновление на месте не удалось — пробуем установить в /usr/local/bin/ssf или существующий ssf
+            if [ $UPDATED -eq 0 ]; then
+                SSF_EXEC=$(command -v ssf 2>/dev/null || true)
+                if [ -z "$SSF_EXEC" ]; then
+                    SSF_EXEC="/usr/local/bin/ssf"
+                fi
+
+                if [ -f "$SSF_EXEC" ]; then
+                    BACKUP_FILE="${SSF_EXEC}.bak_$(date +%Y%m%d_%H%M%S)"
+                    cp -p "$SSF_EXEC" "$BACKUP_FILE" 2>/dev/null || true
+                fi
+
+                if install -m 755 "$TEMP_SCRIPT" "$SSF_EXEC" 2>/dev/null; then
+                    echo "✓ Обновление успешно установлено в $SSF_EXEC"
+                    UPDATED=1
+                else
+                    echo "✗ Ошибка при установке нового скрипта в $SSF_EXEC. Пытаемся восстановить резервную копию (если есть)."
+                    if [ -n "$BACKUP_FILE" ] && [ -f "$BACKUP_FILE" ]; then
+                        cp -p "$BACKUP_FILE" "$SSF_EXEC" 2>/dev/null || true
+                    fi
+                fi
+            fi
+
+            rm -f "$TEMP_SCRIPT"
+
+            if [ $UPDATED -eq 1 ]; then
+                echo "Установка завершена. Проверяем синтаксис установленного файла..."
+                if bash -n "$SSF_EXEC" 2>/tmp/ssf_syntax_err_check.txt; then
+                    echo "✓ Синтаксис установленного скрипта корректен. Перезапускаем новую версию..."
+                    rm -f /tmp/ssf_syntax_err_check.txt
+                    exec "$SSF_EXEC" "$@"
+                else
+                    echo "✗ Установленный скрипт содержит синтаксические ошибки. Восстанавливаем резервную копию (если есть)."
+                    sed -n '1,200p' /tmp/ssf_syntax_err_check.txt
+                    if [ -n "$BACKUP_FILE" ] && [ -f "$BACKUP_FILE" ]; then
+                        cp -p "$BACKUP_FILE" "$SSF_EXEC" 2>/dev/null || true
+                        echo "Резервная копия восстановлена в $SSF_EXEC"
+                    fi
+                    rm -f /tmp/ssf_syntax_err_check.txt
+                    read -p "Нажмите Enter для продолжения..."
+                    return 1
+                fi
+            else
+                echo "✗ Не удалось установить обновление ни в $TARGET_ON_PLACE, ни в $SSF_EXEC."
+                read -p "Нажмите Enter для продолжения..."
+                return 1
+            fi
+        else
+            echo "Обновление отменено пользователем."
+            rm -f "$TEMP_SCRIPT"
+            read -p "Нажмите Enter для продолжения..."
+            return 1
+        fi
+    else
+        echo "✗ Ошибка при загрузке скрипта с GitHub."
+        rm -f "$TEMP_SCRIPT"
+        read -p "Нажмите Enter для продолжения..."
+        return 1
+    fi
+}
+
+# --- Главное меню ---
+main_menu() {
+    while true; do
+        clear
+        echo "--- Меню настройки сервера ---"
+        echo "1. Настройка SSH (смена порта, отключение пароля, добавление ключа)"
+        echo "2. Отключить ICMP Ping"
+        echo "3. Установить Reshala-Remnawave-Bedolaga (DonMatteoVPN)"
+        echo "4. Установить Remnawave Node (Remnanode)"
+        echo "5. Обновить Remnawave Node (Remnanode)"
+        echo "6. Установить TrafficGuard-auto"
+        echo "7. Установить Warp Native"
+        echo "8. Проверить и установить обновления"
+        echo "9. Комплексная диагностика Remnanode (VLESS)"
+        echo "0. Выход"
+        echo "----------------------------"
+        read -p "Выберите опцию: " OPTION
+
+        case $OPTION in
+            1) configure_ssh ;;
+            2) disable_icmp_ping ;;
+            3) install_donmatteovpn ;;
+            4) install_remnanode ;;
+            5) update_remnanode ;;
+            6) install_trafficguard ;;
+            7) install_warp_native ;;
+            8) check_and_update ;;
+            9) diagnostic_remnanode ;;
+            0) echo "Выход из скрипта. До свидания!"; exit 0 ;;
+            *) echo "Неверная опция. Пожалуйста, выберите число от 0 до 9."; read -p "Нажмите Enter для продолжения..." ;;
+        esac
+    done
+}
+
+# --- Проверка прав root перед запуском меню ---
+if [ "$(id -u)" -ne 0 ]; then
+   echo "Этот скрипт должен быть запущен с правами root. Используйте sudo."
+   exit 1
+fi
+
+# Запуск главного меню
+main_menu
