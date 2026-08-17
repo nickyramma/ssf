@@ -196,7 +196,7 @@ configure_ssh() {
 
     else
         echo "Не удалось определить поддерживаемый фаервол (UFW или firewalld)."
-        echo "Вам необходимо вручную настроить ваш фаервол, чтобы разрешить входящие соединения на порту $NEW_SSH_PORT"
+        echo "Вам необходимо вручную настроить ваш фаервол, чтобы разрешить входящие соединения на порту $NEW_SSH_PORT."
         echo "Пример для iptables (может отличаться):"
         echo "sudo iptables -A INPUT -p tcp --dport $NEW_SSH_PORT -j ACCEPT"
         echo "sudo service netfilter-persistent save" # или другая команда для сохранения iptables
@@ -259,9 +259,7 @@ disable_icmp_ping() {
     echo "Добавляем или изменяем настройки net.ipv4.icmp_echo_ignore_all..."
 
     # Удаляем старые записи из sysctl.conf, если они есть
-    if [ -f "$SYSCTL_CONF" ]; then
-        sed -i '/^net.ipv4.icmp_echo_ignore_all/d' "$SYSCTL_CONF"
-    fi
+    sed -i '/^net.ipv4.icmp_echo_ignore_all/d' "$SYSCTL_CONF"
 
     # Создаем или перезаписываем файл в sysctl.d для отключения пинга
     echo "net.ipv4.icmp_echo_ignore_all = 1" | tee "$SYSCTL_D_CONF" > /dev/null
@@ -292,14 +290,13 @@ disable_icmp_ping() {
         fi
 
         # Проверяем, есть ли строка с -j DROP уже
-        if grep -qF -- "$PATTERN_DROP" "$UFW_BEFORE_RULES"; then
+        if grep -qF "$PATTERN_DROP" "$UFW_BEFORE_RULES"; then
             echo "✓ ICMP echo-request уже отключён в $UFW_BEFORE_RULES (найдена строка -j DROP)."
-        elif grep -qF -- "$PATTERN_ACCEPT" "$UFW_BEFORE_RULES"; then
+        elif grep -qF "$PATTERN_ACCEPT" "$UFW_BEFORE_RULES"; then
             # Заменяем только точную строку ACCEPT -> DROP
-            TMP_FILE=$(mktemp)
-            if awk -v a="$PATTERN_ACCEPT" -v b="$PATTERN_DROP" '$0==a { print b; next } { print }' "$UFW_BEFORE_RULES" > "$TMP_FILE" && mv "$TMP_FILE" "$UFW_BEFORE_RULES"; then
+            if sed -i "s|${PATTERN_ACCEPT}|${PATTERN_DROP}|" "$UFW_BEFORE_RULES"; then
                 # Проверяем, удалось ли заменить
-                if grep -qF -- "$PATTERN_DROP" "$UFW_BEFORE_RULES"; then
+                if grep -qF "$PATTERN_DROP" "$UFW_BEFORE_RULES"; then
                     echo "✓ Правило в $UFW_BEFORE_RULES обновлено: ACCEPT -> DROP."
                     # Перезагружаем UFW, если он установлен и активен
                     if command -v ufw &> /dev/null; then
@@ -324,46 +321,7 @@ disable_icmp_ping() {
                 echo "⚠ Ошибка при попытке изменить $UFW_BEFORE_RULES"
             fi
         else
-            # Ни ACCEPT, ни DROP нет — необходимо безопасно вставить DROP внутри таблицы *filter перед COMMIT
-            # Сначала находим таблицу *filter
-            FILTER_LINE=$(grep -nF -- '*filter' "$UFW_BEFORE_RULES" | head -n1 | cut -d: -f1 || true)
-            if [ -n "$FILTER_LINE" ]; then
-                # Найдём первый COMMIT после начала таблицы *filter
-                REL_COMMIT_LINE=$(tail -n +$FILTER_LINE "$UFW_BEFORE_RULES" | grep -nF -- 'COMMIT' | head -n1 | cut -d: -f1 || true)
-                if [ -n "$REL_COMMIT_LINE" ]; then
-                    COMMIT_LINE=$((FILTER_LINE + REL_COMMIT_LINE - 1))
-                    TMP_FILE=$(mktemp)
-                    # Вставляем PATTERN_DROP перед строкой COMMIT внутри найденной таблицы
-                    awk -v ins_line="$COMMIT_LINE" -v pat="$PATTERN_DROP" 'NR==ins_line { print pat; print $0; next } { print }' "$UFW_BEFORE_RULES" > "$TMP_FILE" && mv "$TMP_FILE" "$UFW_BEFORE_RULES"
-
-                    # Проверяем, добавилось ли правило
-                    if grep -qF -- "$PATTERN_DROP" "$UFW_BEFORE_RULES"; then
-                        echo "✓ Правило DROP добавлено внутри таблицы *filter перед COMMIT в $UFW_BEFORE_RULES."
-                        # Перезагружаем UFW, если он установлен и активен
-                        if command -v ufw &> /dev/null; then
-                            UFW_STATUS=$(ufw status 2>/dev/null || true)
-                            if echo "$UFW_STATUS" | grep -q "Status: active"; then
-                                if ufw reload; then
-                                    echo "✓ UFW перезагружен."
-                                else
-                                    echo "⚠ Не удалось перезагрузить UFW после добавления правила."
-                                fi
-                            else
-                                echo "UFW установлен, но не активен. Пропускаем перезагрузку UFW."
-                            fi
-                        else
-                            echo "UFW не найден. Изменение файла выполнено локально."
-                        fi
-                    else
-                        echo "⚠ Не удалось добавить правило DROP в $UFW_BEFORE_RULES. Откатываем изменения при наличии бэкапа."
-                        [ -f "$UFW_BACKUP" ] && cp -p "$UFW_BACKUP" "$UFW_BEFORE_RULES" 2>/dev/null || true
-                    fi
-                else
-                    echo "⚠ Не удалось найти COMMIT после таблицы *filter. Пропускаем изменение UFW before.rules."
-                fi
-            else
-                echo "⚠ Таблица *filter не найдена в $UFW_BEFORE_RULES. Пропускаем изменение UFW before.rules."
-            fi
+            echo "⚠ Не удалось изменить правило ICMP: строка с echo-request не найдена в $UFW_BEFORE_RULES"
         fi
     else
         echo "Файл $UFW_BEFORE_RULES не найден. Пропускаем изменение UFW правил."
@@ -461,7 +419,7 @@ install_remnanode() {
             echo "Docker успешно установлен."
             # Добавляем текущего пользователя в группу docker, чтобы не использовать sudo постоянно
             usermod -aG docker "$CURRENT_USER"
-            echo "Пользователь '$CURRENT_USER' добавлен в группу 'docker'. Для применения изменений может потребоваться пере[...]
+            echo "Пользователь '$CURRENT_USER' добавлен в группу 'docker'. Для применения изменений может потребоваться перезагрузка или новая сессия."
             # Даем небольшую задержку, чтобы Docker мог полностью инициализироваться
             sleep 5
         else
