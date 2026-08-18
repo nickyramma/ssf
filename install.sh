@@ -202,4 +202,5 @@ echo ""
 echo "🚀 Запускаем SSF..."
 echo ""
 
-exec "$SSF_PATH"
+"$SSF_PATH"
+exit $?
