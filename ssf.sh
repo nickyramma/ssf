@@ -426,7 +426,7 @@ install_remnanode() {
             echo "Docker успешно установлен."
             # Добавляем текущего пользователя в группу docker, чтобы не использовать sudo постоянно
             usermod -aG docker "$CURRENT_USER"
-            echo "Пользователь '$CURRENT_USER' добавлен в группу 'docker'. Для применения изменений может потребоваться пере[...]
+            echo "Пользователь '$CURRENT_USER' добавлен в группу 'docker'. Для применения изменений может потребоваться перезапуск сессии."
             # Даем небольшую задержку, чтобы Docker мог полностью инициализироваться
             sleep 5
         else
@@ -848,7 +848,7 @@ check_and_update() {
                     echo "✓ Обновление успешно установлено в $SSF_EXEC"
                     UPDATED=1
                 else
-                    echo "✗ Ошибка при установке нового скрипта в $SSF_EXEC. Пытаемся восстановить резервную копию (если е[...]
+                    echo "✗ Ошибка при установке нового скрипта в $SSF_EXEC. Пытаемся восстановить резервную копию (если есть)..."
                     if [ -n "$BACKUP_FILE" ] && [ -f "$BACKUP_FILE" ]; then
                         cp -p "$BACKUP_FILE" "$SSF_EXEC" 2>/dev/null || true
                     fi
@@ -864,7 +864,7 @@ check_and_update() {
                     rm -f /tmp/ssf_syntax_err_check.txt
                     exec "$SSF_EXEC" "$@"
                 else
-                    echo "✗ Установленный скрипт содержит синтаксические ошибки. Восстанавливаем резервную копию (е�[...]
+                    echo "✗ Установленный скрипт содержит синтаксические ошибки. Восстанавливаем резервную копию (если есть)..."
                     sed -n '1,200p' /tmp/ssf_syntax_err_check.txt
                     if [ -n "$BACKUP_FILE" ] && [ -f "$BACKUP_FILE" ]; then
                         cp -p "$BACKUP_FILE" "$SSF_EXEC" 2>/dev/null || true
