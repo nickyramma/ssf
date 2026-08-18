@@ -11,10 +11,10 @@
 # 8. Проверить и установить обновления
 # 9. Комплексная диагностика Remnanode (VLESS)
 
-SCRIPT_VERSION="1.1.10"
+SCRIPT_VERSION="1.1.11"
 SCRIPT_NAME="ssf.sh"
 SCRIPT_REPO="https://raw.githubusercontent.com/nickyramma/ssf/main/ssf.sh"
-SCRIPT_PATH="/usr/local/bin/ssf"
+SCRIPT_PATH="/usr/local/lib/ssf/ssf.sh"
 VERSION_FILE="/tmp/ssf_version.txt"
 
 SSH_CONFIG_FILE="/etc/ssh/sshd_config"
