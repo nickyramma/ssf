@@ -226,7 +226,7 @@ echo ""
 # Предложение запустить SSF
 # --------------------------------------------------
 
-read -r -p "Запустить SSF сейчас? [Y/n]: " START_SSF
+read -r -p "Запустить SSF сейчас? [Y/n]: " START_SSF < /dev/tty
 
 case "$START_SSF" in
     n|N)
@@ -238,7 +238,7 @@ case "$START_SSF" in
         echo ""
         echo "🚀 Запускаем SSF..."
         echo ""
-        exec "$SSF_LAUNCHER"
+        exec "$SSF_LAUNCHER" < /dev/tty
         ;;
 esac
 
