@@ -12,7 +12,7 @@
 # 9. Комплексная диагностика Remnanode (VLESS)
 
 SCRIPT_VERSION="1.1.10"
-SCRIPT_NAME="ssf"
+SCRIPT_NAME="ssf.sh"
 SCRIPT_REPO="https://raw.githubusercontent.com/nickyramma/ssf/main/ssf.sh"
 SCRIPT_PATH="/usr/local/bin/ssf"
 VERSION_FILE="/tmp/ssf_version.txt"
