@@ -11,10 +11,10 @@
 # 8. Проверить и установить обновления
 # 9. Комплексная диагностика Remnanode (VLESS)
 
-SCRIPT_VERSION="1.1.8"
-SCRIPT_NAME="ssf.sh"
+SCRIPT_VERSION="1.1.9"
+SCRIPT_NAME="ssf"
 SCRIPT_REPO="https://raw.githubusercontent.com/nickyramma/ssf/main/ssf.sh"
-SCRIPT_PATH="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/$SCRIPT_NAME"
+SCRIPT_PATH="/usr/local/bin/ssf"
 VERSION_FILE="/tmp/ssf_version.txt"
 
 SSH_CONFIG_FILE="/etc/ssh/sshd_config"
@@ -739,158 +739,132 @@ check_and_update() {
     echo "Текущая версия скрипта: $SCRIPT_VERSION"
     echo ""
 
-    if ! command -v curl &> /dev/null; then
+    if ! command -v curl >/dev/null 2>&1; then
         echo "curl не найден. Устанавливаем curl..."
-        if command -v apt-get &> /dev/null; then
+
+        if command -v apt-get >/dev/null 2>&1; then
             apt-get update && apt-get install -y curl
-        elif command -v yum &> /dev/null; then
+        elif command -v yum >/dev/null 2>&1; then
             yum install -y curl
-        elif command -v dnf &> /dev/null; then
+        elif command -v dnf >/dev/null 2>&1; then
             dnf install -y curl
         else
-            echo "Не удалось установить curl. Невозможно проверить обновления."
+            echo "❌ Не удалось установить curl."
             read -p "Нажмите Enter для продолжения..."
             return 1
         fi
     fi
 
-    TEMP_SCRIPT="/tmp/ssf_new.sh"
-    echo "Загрузка новой версии в временный файл $TEMP_SCRIPT..."
-    if curl -fsSL -o "$TEMP_SCRIPT" "$SCRIPT_REPO"; then
-        echo "✓ Скрипт успешно загружен в $TEMP_SCRIPT."
+    TEMP_SCRIPT="/tmp/ssf.new.$$"
+    BACKUP_FILE="${SCRIPT_PATH}.bak_$(date +%Y%m%d_%H%M%S)"
 
-        # проверяем размер и содержимое
-        FILESIZE=$(stat -c%s "$TEMP_SCRIPT" 2>/dev/null || echo 0)
-        if [ "$FILESIZE" -lt 200 ]; then
-            echo "✗ Загруженный файл слишком маленький ( $FILESIZE bytes ). Отменяем обновление."
-            rm -f "$TEMP_SCRIPT"
-            read -p "Нажмите Enter для продолжения..."
-            return 1
-        fi
+    echo "📥 Проверяем новую версию..."
 
-        # Проверяем синтаксис новой копии
-        if ! bash -n "$TEMP_SCRIPT" 2>/tmp/ssf_syntax_err.txt; then
-            echo "✗ Синтаксическая ошибка в загруженном скрипте. Обновление отменено."
-            echo "Сводка ошибки:"
-            sed -n '1,200p' /tmp/ssf_syntax_err.txt
-            rm -f "$TEMP_SCRIPT" /tmp/ssf_syntax_err.txt
-            read -p "Нажмите Enter для продолжения..."
-            return 1
-        fi
-
-        NEW_VERSION=$(grep "^SCRIPT_VERSION=" "$TEMP_SCRIPT" | head -n1 | cut -d'"' -f2)
-        if [ -z "$NEW_VERSION" ]; then
-            echo "⚠ Не удалось определить версию нового скрипта. Обновление отменено."
-            rm -f "$TEMP_SCRIPT"
-            read -p "Нажмите Enter для продолжения..."
-            return 1
-        fi
-
-        echo "Доступная версия на GitHub: $NEW_VERSION"
-
-        if [ "$NEW_VERSION" == "$SCRIPT_VERSION" ]; then
-            echo "✓ Вы используете последнюю версию скрипта."
-            rm -f "$TEMP_SCRIPT"
-            read -p "Нажмите Enter для продолжения..."
-            return 0
-        fi
-
-        echo ""
-        echo "⚡ Доступно обновление!"
-        echo "Текущая версия: $SCRIPT_VERSION"
-        echo "Новая версия:   $NEW_VERSION"
-        echo ""
-
-        printf 'Хотите установить обновление? (y/N): '
-        read -r REPLY
-        echo
-
-        if [[ $REPLY =~ ^[Yy]$ ]]; then
-            echo "Устанавливаем обновление..."
-
-            # Подготовка целевого пути и резервной копии
-            TARGET_ON_PLACE="$SCRIPT_PATH"
-            UPDATED=0
-
-            # Всегда проверяем синтаксис уже скачанного файла (ещё раз) и размер
-            if bash -n "$TEMP_SCRIPT" 2>/dev/null; then
-                # Если текущий файл существует, создаём резервную копию
-                if [ -f "$TARGET_ON_PLACE" ]; then
-                    BACKUP_FILE="${TARGET_ON_PLACE}.bak_$(date +%Y%m%d_%H%M%S)"
-                    cp -p "$TARGET_ON_PLACE" "$BACKUP_FILE" 2>/dev/null || true
-                fi
-
-                # Копируем временный файл в целевое место атомарно
-                if install -m 755 "$TEMP_SCRIPT" "$TARGET_ON_PLACE" 2>/dev/null; then
-                    echo "✓ Обновление успешно установлено в $TARGET_ON_PLACE"
-                    UPDATED=1
-                    SSF_EXEC="$TARGET_ON_PLACE"
-                else
-                    echo "⚠ Не удалось записать в $TARGET_ON_PLACE. Проверяем /usr/local/bin/ssf..."
-                fi
-            else
-                echo "✗ Новая версия не прошла синтаксическую проверку. Обновление отменено."
-            fi
-
-            # Если обновление на месте не удалось — пробуем установить в /usr/local/bin/ssf или существующий ssf
-            if [ $UPDATED -eq 0 ]; then
-                SSF_EXEC=$(command -v ssf 2>/dev/null || true)
-                if [ -z "$SSF_EXEC" ]; then
-                    SSF_EXEC="/usr/local/bin/ssf"
-                fi
-
-                if [ -f "$SSF_EXEC" ]; then
-                    BACKUP_FILE="${SSF_EXEC}.bak_$(date +%Y%m%d_%H%M%S)"
-                    cp -p "$SSF_EXEC" "$BACKUP_FILE" 2>/dev/null || true
-                fi
-
-                if install -m 755 "$TEMP_SCRIPT" "$SSF_EXEC" 2>/dev/null; then
-                    echo "✓ Обновление успешно установлено в $SSF_EXEC"
-                    UPDATED=1
-                else
-                    echo "✗ Ошибка при установке нового скрипта в $SSF_EXEC. Пытаемся восстановить резервную копию (если есть)..."
-                    if [ -n "$BACKUP_FILE" ] && [ -f "$BACKUP_FILE" ]; then
-                        cp -p "$BACKUP_FILE" "$SSF_EXEC" 2>/dev/null || true
-                    fi
-                fi
-            fi
-
-            rm -f "$TEMP_SCRIPT"
-
-            if [ $UPDATED -eq 1 ]; then
-                echo "Установка завершена. Проверяем синтаксис установленного файла..."
-                if bash -n "$SSF_EXEC" 2>/tmp/ssf_syntax_err_check.txt; then
-                    echo "✓ Синтаксис установленного скрипта корректен. Перезапускаем новую версию..."
-                    rm -f /tmp/ssf_syntax_err_check.txt
-                    exec "$SSF_EXEC" "$@"
-                else
-                    echo "✗ Установленный скрипт содержит синтаксические ошибки. Восстанавливаем резервную копию (если есть)..."
-                    sed -n '1,200p' /tmp/ssf_syntax_err_check.txt
-                    if [ -n "$BACKUP_FILE" ] && [ -f "$BACKUP_FILE" ]; then
-                        cp -p "$BACKUP_FILE" "$SSF_EXEC" 2>/dev/null || true
-                        echo "Резервная копия восстановлена в $SSF_EXEC"
-                    fi
-                    rm -f /tmp/ssf_syntax_err_check.txt
-                    read -p "Нажмите Enter для продолжения..."
-                    return 1
-                fi
-            else
-                echo "✗ Не удалось установить обновление ни в $TARGET_ON_PLACE, ни в $SSF_EXEC."
-                read -p "Нажмите Enter для продолжения..."
-                return 1
-            fi
-        else
-            echo "Обновление отменено пользователем."
-            rm -f "$TEMP_SCRIPT"
-            read -p "Нажмите Enter для продолжения..."
-            return 1
-        fi
-    else
-        echo "✗ Ошибка при загрузке скрипта с GitHub."
+    if ! curl -fsSL "$SCRIPT_REPO" -o "$TEMP_SCRIPT"; then
+        echo "❌ Не удалось скачать новую версию SSF."
         rm -f "$TEMP_SCRIPT"
         read -p "Нажмите Enter для продолжения..."
         return 1
     fi
+
+    if [ ! -s "$TEMP_SCRIPT" ]; then
+        echo "❌ Загруженный файл пустой."
+        rm -f "$TEMP_SCRIPT"
+        read -p "Нажмите Enter для продолжения..."
+        return 1
+    fi
+
+    if ! bash -n "$TEMP_SCRIPT"; then
+        echo "❌ Новая версия содержит синтаксические ошибки."
+        echo "Обновление отменено."
+        rm -f "$TEMP_SCRIPT"
+        read -p "Нажмите Enter для продолжения..."
+        return 1
+    fi
+
+    NEW_VERSION=$(grep '^SCRIPT_VERSION=' "$TEMP_SCRIPT" | head -n1 | cut -d'"' -f2)
+
+    if [ -z "$NEW_VERSION" ]; then
+        echo "❌ Не удалось определить версию новой версии."
+        rm -f "$TEMP_SCRIPT"
+        read -p "Нажмите Enter для продолжения..."
+        return 1
+    fi
+
+    echo "Доступная версия на GitHub: $NEW_VERSION"
+    echo "Текущая версия:           $SCRIPT_VERSION"
+    echo ""
+
+    if [ "$NEW_VERSION" = "$SCRIPT_VERSION" ]; then
+        echo "✓ У вас уже установлена последняя версия."
+        rm -f "$TEMP_SCRIPT"
+        read -p "Нажмите Enter для продолжения..."
+        return 0
+    fi
+
+    echo "⚡ Доступно обновление!"
+    echo ""
+    printf 'Установить версию %s? (y/N): ' "$NEW_VERSION"
+    read -r REPLY
+    echo
+
+    if [[ ! "$REPLY" =~ ^[Yy]$ ]]; then
+        echo "Обновление отменено."
+        rm -f "$TEMP_SCRIPT"
+        read -p "Нажмите Enter для продолжения..."
+        return 0
+    fi
+
+    echo "📦 Устанавливаем новую версию..."
+
+    if [ -f "$SCRIPT_PATH" ]; then
+        cp -p "$SCRIPT_PATH" "$BACKUP_FILE"
+        echo "✓ Резервная копия: $BACKUP_FILE"
+    fi
+
+    INSTALL_TMP="${SCRIPT_PATH}.new.$$"
+
+    if ! install -m 755 "$TEMP_SCRIPT" "$INSTALL_TMP"; then
+        echo "❌ Не удалось подготовить новую версию."
+        rm -f "$TEMP_SCRIPT" "$INSTALL_TMP"
+        return 1
+    fi
+
+    if ! bash -n "$INSTALL_TMP"; then
+        echo "❌ Новая версия не прошла финальную проверку."
+        rm -f "$TEMP_SCRIPT" "$INSTALL_TMP"
+        return 1
+    fi
+
+    if ! mv -f "$INSTALL_TMP" "$SCRIPT_PATH"; then
+        echo "❌ Не удалось заменить текущий SSF."
+
+        rm -f "$TEMP_SCRIPT" "$INSTALL_TMP"
+
+        if [ -f "$BACKUP_FILE" ]; then
+            cp -p "$BACKUP_FILE" "$SCRIPT_PATH"
+            chmod 755 "$SCRIPT_PATH"
+            echo "✓ Резервная копия восстановлена."
+        fi
+
+        return 1
+    fi
+
+    chmod 755 "$SCRIPT_PATH"
+    rm -f "$TEMP_SCRIPT"
+
+    echo ""
+    echo "========================================="
+    echo "✓ SSF успешно обновлён!"
+    echo "========================================="
+    echo ""
+    echo "Старая версия: $SCRIPT_VERSION"
+    echo "Новая версия:  $NEW_VERSION"
+    echo ""
+    echo "🚀 Запускаем новую версию..."
+    echo ""
+
+    exec "$SCRIPT_PATH" "$@"
 }
 
 # --- Главное меню ---
