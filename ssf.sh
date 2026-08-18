@@ -294,13 +294,13 @@ disable_icmp_ping() {
         fi
 
         # Проверяем, есть ли строка с -j DROP уже
-        if grep -qF "$PATTERN_DROP" "$UFW_BEFORE_RULES"; then
+        if grep -qF -- "$PATTERN_DROP" "$UFW_BEFORE_RULES"; then
             echo "✓ ICMP echo-request уже отключён в $UFW_BEFORE_RULES (найдена строка -j DROP)."
-        elif grep -qF "$PATTERN_ACCEPT" "$UFW_BEFORE_RULES"; then
+        elif grep -qF -- "$PATTERN_ACCEPT" "$UFW_BEFORE_RULES"; then
             # Заменяем только точную строку ACCEPT -> DROP
             if sed -i "s|${PATTERN_ACCEPT}|${PATTERN_DROP}|" "$UFW_BEFORE_RULES"; then
                 # Проверяем, удалось ли заменить
-                if grep -qF "$PATTERN_DROP" "$UFW_BEFORE_RULES"; then
+                if grep -qF -- "$PATTERN_DROP" "$UFW_BEFORE_RULES"; then
                     echo "✓ Правило в $UFW_BEFORE_RULES обновлено: ACCEPT -> DROP."
                     # Перезагружаем UFW, если он установлен и активен
                     if command -v ufw &> /dev/null; then
