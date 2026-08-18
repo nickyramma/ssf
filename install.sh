@@ -1,151 +1,205 @@
 #!/bin/bash
 
-# Скрипт установки SSF (Server Setup Framework)
-# Использование: curl -fsSL https://raw.githubusercontent.com/nickyramma/ssf/main/install.sh | bash
+# ============================================================
+# SSF (Server Setup Framework) — Installer
+# ============================================================
+#
+# Установка:
+#   curl -fsSL https://raw.githubusercontent.com/nickyramma/ssf/main/install.sh | bash
+#
+# После успешной установки SSF запускается автоматически.
+# ============================================================
 
 set -e
 
-echo "=== Установка SSF (Server Setup Framework) ==="
+SSF_URL="https://raw.githubusercontent.com/nickyramma/ssf/main/ssf.sh"
+SSF_PATH="/usr/local/bin/ssf"
+TMP_PATH="/tmp/ssf.new.$$"
+
+echo ""
+echo "========================================="
+echo "     SSF — Server Setup Framework"
+echo "             Установщик"
+echo "========================================="
 echo ""
 
-# Проверка прав root
+# ------------------------------------------------------------
+# Проверка root
+# ------------------------------------------------------------
+
 if [ "$(id -u)" -ne 0 ]; then
-    echo "❌ Ошибка: Этот скрипт должен быть запущен с правами root."
-    echo "Используйте: sudo bash install.sh или curl -fsSL https://raw.githubusercontent.com/nickyramma/ssf/main/install.sh | sudo bash"
+    echo "❌ Ошибка: установщик должен быть запущен от root."
+    echo ""
+    echo "Используйте:"
+    echo "  sudo bash install.sh"
+    echo ""
     exit 1
 fi
 
-# Проверка наличия curl или wget
-if ! command -v curl &> /dev/null && ! command -v wget &> /dev/null; then
-    echo "❌ Ошибка: curl или wget не найдены. Установите один из них и повторите попытку."
+# ------------------------------------------------------------
+# Проверка curl / wget
+# ------------------------------------------------------------
+
+if command -v curl >/dev/null 2>&1; then
+    DOWNLOAD_CMD="curl"
+elif command -v wget >/dev/null 2>&1; then
+    DOWNLOAD_CMD="wget"
+else
+    echo "❌ Ошибка: не найден curl или wget."
+    echo ""
+    echo "Установите один из них и повторите попытку."
     exit 1
 fi
 
-# Переменные пути
-SSF_LIB_DIR="/usr/local/lib/ssf"
-SSF_BIN="/usr/local/bin/ssf"
-SSF_MAIN="/usr/local/lib/ssf/ssf.sh"
-SSF_BACKUP="/usr/local/lib/ssf/ssf.sh.bak"
-SSF_REMOTE_URL="https://raw.githubusercontent.com/nickyramma/ssf/main/ssf.sh"
-SSF_TMP="/tmp/ssf.sh.new"
-
+# ------------------------------------------------------------
 # Очистка временного файла при выходе
+# ------------------------------------------------------------
+
 cleanup() {
-    if [ -f "$SSF_TMP" ]; then
-        rm -f "$SSF_TMP"
-    fi
+    rm -f "$TMP_PATH"
 }
+
 trap cleanup EXIT
 
-echo "📥 Скачиваем ssf.sh..."
+# ------------------------------------------------------------
+# Скачивание SSF
+# ------------------------------------------------------------
 
-# Скачиваем файл во временное место
-DOWNLOAD_EXIT_CODE=0
-if command -v curl &> /dev/null; then
-    curl -fsSL --retry 3 --connect-timeout 10 \
-        "$SSF_REMOTE_URL" \
-        -o "$SSF_TMP" || DOWNLOAD_EXIT_CODE=$?
-elif command -v wget &> /dev/null; then
-    wget -q --timeout=10 --tries=3 \
-        "$SSF_REMOTE_URL" \
-        -O "$SSF_TMP" || DOWNLOAD_EXIT_CODE=$?
+echo "📥 Скачиваем последнюю версию SSF..."
+echo ""
+
+if [ "$DOWNLOAD_CMD" = "curl" ]; then
+    if ! curl -fLsS "$SSF_URL" -o "$TMP_PATH"; then
+        echo ""
+        echo "❌ Не удалось скачать SSF с GitHub."
+        exit 1
+    fi
+else
+    if ! wget -q "$SSF_URL" -O "$TMP_PATH"; then
+        echo ""
+        echo "❌ Не удалось скачать SSF с GitHub."
+        exit 1
+    fi
 fi
 
-# Проверка успешности загрузки
-if [ $DOWNLOAD_EXIT_CODE -ne 0 ]; then
-    echo "❌ Ошибка: Не удалось скачать ssf.sh"
+# ------------------------------------------------------------
+# Проверка скачанного файла
+# ------------------------------------------------------------
+
+if [ ! -s "$TMP_PATH" ]; then
+    echo "❌ Ошибка: скачанный файл пустой."
     exit 1
 fi
 
-# Проверка, что файл не пустой
-if [ ! -s "$SSF_TMP" ]; then
-    echo "❌ Ошибка: Скачанный файл пуст"
+echo "✅ Файл успешно скачан."
+
+# ------------------------------------------------------------
+# Проверка shebang
+# ------------------------------------------------------------
+
+if ! head -n 1 "$TMP_PATH" | grep -q '^#!/bin/bash'; then
+    echo "❌ Ошибка: скачанный файл не похож на Bash-скрипт."
+    echo ""
+    echo "Первая строка:"
+    head -n 1 "$TMP_PATH"
     exit 1
 fi
 
-# Проверка, что первая строка содержит shebang
-FIRST_LINE=$(head -n 1 "$SSF_TMP")
-if [ "$FIRST_LINE" != "#!/bin/bash" ]; then
-    echo "❌ Ошибка: Скачанный файл не является bash-скриптом"
+# ------------------------------------------------------------
+# Проверка синтаксиса
+# ------------------------------------------------------------
+
+echo "🔍 Проверяем синтаксис SSF..."
+
+if ! bash -n "$TMP_PATH"; then
+    echo ""
+    echo "❌ ОШИБКА: скачанный SSF содержит синтаксические ошибки."
+    echo ""
+    echo "Установка отменена."
+    echo "Текущий установленный SSF не изменён."
     exit 1
 fi
 
-echo "✅ Файл скачан"
+echo "✅ Синтаксис корректен."
 
-# Проверка синтаксиса скрипта
-echo "🔍 Проверяем синтаксис скрипта..."
-if ! bash -n "$SSF_TMP" 2>/dev/null; then
-    echo "❌ Ошибка: Синтаксис скрипта некорректен"
+# ------------------------------------------------------------
+# Backup существующего SSF
+# ------------------------------------------------------------
+
+if [ -f "$SSF_PATH" ] || [ -L "$SSF_PATH" ]; then
+    BACKUP_PATH="${SSF_PATH}.bak.$(date +%Y%m%d_%H%M%S)"
+
+    echo ""
+    echo "💾 Создаём резервную копию текущего SSF:"
+    echo "   $BACKUP_PATH"
+
+    cp -L "$SSF_PATH" "$BACKUP_PATH"
+
+    echo "✅ Резервная копия создана."
+fi
+
+# ------------------------------------------------------------
+# Установка нового SSF
+# ------------------------------------------------------------
+
+echo ""
+echo "📦 Устанавливаем новую версию SSF..."
+
+chmod 755 "$TMP_PATH"
+
+# Атомарная замена.
+# Сначала новый файл полностью скачан и проверен,
+# только после этого заменяем старый.
+mv -f "$TMP_PATH" "$SSF_PATH"
+
+chmod 755 "$SSF_PATH"
+
+echo "✅ SSF установлен в:"
+echo "   $SSF_PATH"
+
+# ------------------------------------------------------------
+# Финальная проверка установленного файла
+# ------------------------------------------------------------
+
+echo ""
+echo "🔍 Выполняем финальную проверку..."
+
+if ! bash -n "$SSF_PATH"; then
+    echo ""
+    echo "❌ ОШИБКА: установленный SSF не прошёл проверку синтаксиса."
+
+    if [ -n "${BACKUP_PATH:-}" ] && [ -f "$BACKUP_PATH" ]; then
+        echo "🔄 Восстанавливаем резервную копию..."
+
+        cp -f "$BACKUP_PATH" "$SSF_PATH"
+        chmod 755 "$SSF_PATH"
+
+        echo "✅ Предыдущая версия восстановлена."
+    fi
+
     exit 1
 fi
 
-echo "✅ Синтаксис проверен"
+echo "✅ Финальная проверка пройдена."
 
-# Создание директории для установки
-echo "📁 Создаём директорию $SSF_LIB_DIR..."
-mkdir -p "$SSF_LIB_DIR"
-
-# Сохранение резервной копии, если файл уже существует
-if [ -f "$SSF_MAIN" ]; then
-    echo "💾 Сохраняем резервную копию..."
-    cp "$SSF_MAIN" "$SSF_BACKUP"
-fi
-
-# Установка прав исполнения на временный файл
-chmod +x "$SSF_TMP"
-
-# Атомарная замена файла
-echo "🔄 Устанавливаем ssf.sh..."
-mv "$SSF_TMP" "$SSF_MAIN"
-
-# Создание launcher-файла в /usr/local/bin/ssf
-echo "🔗 Создаём launcher в $SSF_BIN..."
-cat > "$SSF_BIN" << 'LAUNCHER'
-#!/bin/bash
-exec /usr/local/lib/ssf/ssf.sh "$@"
-LAUNCHER
-
-chmod +x "$SSF_BIN"
-
-# Финальные проверки
-echo "✓ Проверяем установку..."
-
-if [ ! -x "$SSF_BIN" ]; then
-    echo "❌ Ошибка: Launcher не исполняем"
-    exit 1
-fi
-
-if [ ! -x "$SSF_MAIN" ]; then
-    echo "❌ Ошибка: ssf.sh не исполняем"
-    exit 1
-fi
-
-if ! bash -n "$SSF_MAIN" 2>/dev/null; then
-    echo "❌ Ошибка: Установленный ssf.sh имеет синтаксические ошибки"
-    exit 1
-fi
-
-echo "✅ Все проверки пройдены"
+# ------------------------------------------------------------
+# Информация
+# ------------------------------------------------------------
 
 echo ""
 echo "========================================="
-echo " SSF установлен успешно"
+echo "       SSF успешно установлен!"
 echo "========================================="
 echo ""
-echo "Файл:"
-echo "  $SSF_MAIN"
-echo ""
-echo "Команда:"
+echo "Команда запуска:"
 echo "  ssf"
 echo ""
 
-# Предложение запустить SSF
-read -p "Запустить SSF сейчас? [Y/n]: " -r RESPONSE
-RESPONSE=${RESPONSE:-Y}
+# ------------------------------------------------------------
+# Автоматический запуск SSF
+# ------------------------------------------------------------
 
-if [[ "$RESPONSE" =~ ^[Yy]$ ]]; then
-    exec "$SSF_BIN"
-else
-    echo "Установка завершена. Вы можете запустить SSF командой: ssf"
-    exit 0
-fi
+echo "🚀 Запускаем SSF..."
+echo ""
+
+exec "$SSF_PATH"
