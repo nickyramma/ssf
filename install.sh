@@ -3,6 +3,8 @@
 # Скрипт установки SSF (Server Setup Framework)
 # Использование: curl -fsSL https://raw.githubusercontent.com/nickyramma/ssf/main/install.sh | bash
 
+set -e
+
 echo "=== Установка SSF (Server Setup Framework) ==="
 echo ""
 
@@ -19,41 +21,131 @@ if ! command -v curl &> /dev/null && ! command -v wget &> /dev/null; then
     exit 1
 fi
 
+# Переменные пути
+SSF_LIB_DIR="/usr/local/lib/ssf"
+SSF_BIN="/usr/local/bin/ssf"
+SSF_MAIN="/usr/local/lib/ssf/ssf.sh"
+SSF_BACKUP="/usr/local/lib/ssf/ssf.sh.bak"
+SSF_REMOTE_URL="https://raw.githubusercontent.com/nickyramma/ssf/main/ssf.sh"
+SSF_TMP="/tmp/ssf.sh.new"
+
+# Очистка временного файла при выходе
+cleanup() {
+    if [ -f "$SSF_TMP" ]; then
+        rm -f "$SSF_TMP"
+    fi
+}
+trap cleanup EXIT
+
 echo "📥 Скачиваем ssf.sh..."
 
-# Скачиваем файл
+# Скачиваем файл во временное место
+DOWNLOAD_EXIT_CODE=0
 if command -v curl &> /dev/null; then
-    curl -fsSL https://raw.githubusercontent.com/nickyramma/ssf/main/ssf.sh -o /usr/local/bin/ssf
+    curl -fsSL --retry 3 --connect-timeout 10 \
+        "$SSF_REMOTE_URL" \
+        -o "$SSF_TMP" || DOWNLOAD_EXIT_CODE=$?
 elif command -v wget &> /dev/null; then
-    wget -q https://raw.githubusercontent.com/nickyramma/ssf/main/ssf.sh -O /usr/local/bin/ssf
+    wget -q --timeout=10 --tries=3 \
+        "$SSF_REMOTE_URL" \
+        -O "$SSF_TMP" || DOWNLOAD_EXIT_CODE=$?
 fi
 
 # Проверка успешности загрузки
-if [ ! -f /usr/local/bin/ssf ]; then
+if [ $DOWNLOAD_EXIT_CODE -ne 0 ]; then
     echo "❌ Ошибка: Не удалось скачать ssf.sh"
+    exit 1
+fi
+
+# Проверка, что файл не пустой
+if [ ! -s "$SSF_TMP" ]; then
+    echo "❌ Ошибка: Скачанный файл пуст"
+    exit 1
+fi
+
+# Проверка, что первая строка содержит shebang
+FIRST_LINE=$(head -n 1 "$SSF_TMP")
+if [ "$FIRST_LINE" != "#!/bin/bash" ]; then
+    echo "❌ Ошибка: Скачанный файл не является bash-скриптом"
     exit 1
 fi
 
 echo "✅ Файл скачан"
 
-# Устанавливаем права на исполнение
-echo "🔧 Устанавливаем права на исполнение..."
-chmod +x /usr/local/bin/ssf
-
-echo "✅ Права установлены"
-
-# Проверка успешности установки
-if [ -x /usr/local/bin/ssf ]; then
-    echo ""
-    echo "✨ === Установка завершена успешно! === ✨"
-    echo ""
-    echo "Теперь вы можете использовать команду:"
-    echo "  ssf"
-    echo ""
-    echo "Или с полной дорожкой:"
-    echo "  /usr/local/bin/ssf"
-    echo ""
-else
-    echo "❌ Ошибка: Не удалось установить права на исполнение"
+# Проверка синтаксиса скрипта
+echo "🔍 Проверяем синтаксис скрипта..."
+if ! bash -n "$SSF_TMP" 2>/dev/null; then
+    echo "❌ Ошибка: Синтаксис скрипта некорректен"
     exit 1
+fi
+
+echo "✅ Синтаксис проверен"
+
+# Создание директории для установки
+echo "📁 Создаём директорию $SSF_LIB_DIR..."
+mkdir -p "$SSF_LIB_DIR"
+
+# Сохранение резервной копии, если файл уже существует
+if [ -f "$SSF_MAIN" ]; then
+    echo "💾 Сохраняем резервную копию..."
+    cp "$SSF_MAIN" "$SSF_BACKUP"
+fi
+
+# Установка прав исполнения на временный файл
+chmod +x "$SSF_TMP"
+
+# Атомарная замена файла
+echo "🔄 Устанавливаем ssf.sh..."
+mv "$SSF_TMP" "$SSF_MAIN"
+
+# Создание launcher-файла в /usr/local/bin/ssf
+echo "🔗 Создаём launcher в $SSF_BIN..."
+cat > "$SSF_BIN" << 'LAUNCHER'
+#!/bin/bash
+exec /usr/local/lib/ssf/ssf.sh "$@"
+LAUNCHER
+
+chmod +x "$SSF_BIN"
+
+# Финальные проверки
+echo "✓ Проверяем установку..."
+
+if [ ! -x "$SSF_BIN" ]; then
+    echo "❌ Ошибка: Launcher не исполняем"
+    exit 1
+fi
+
+if [ ! -x "$SSF_MAIN" ]; then
+    echo "❌ Ошибка: ssf.sh не исполняем"
+    exit 1
+fi
+
+if ! bash -n "$SSF_MAIN" 2>/dev/null; then
+    echo "❌ Ошибка: Установленный ssf.sh имеет синтаксические ошибки"
+    exit 1
+fi
+
+echo "✅ Все проверки пройдены"
+
+echo ""
+echo "========================================="
+echo " SSF установлен успешно"
+echo "========================================="
+echo ""
+echo "Файл:"
+echo "  $SSF_MAIN"
+echo ""
+echo "Команда:"
+echo "  ssf"
+echo ""
+
+# Предложение запустить SSF
+read -p "Запустить SSF сейчас? [Y/n]: " -r RESPONSE
+RESPONSE=${RESPONSE:-Y}
+
+if [[ "$RESPONSE" =~ ^[Yy]$ ]]; then
+    exec "$SSF_BIN"
+else
+    echo "Установка завершена. Вы можете запустить SSF командой: ssf"
+    exit 0
 fi
