@@ -11,7 +11,7 @@
 # 8. Проверить и установить обновления
 # 9. Комплексная диагностика Remnanode (VLESS)
 
-SCRIPT_VERSION="1.1.11"
+SCRIPT_VERSION="1.1.12"
 SCRIPT_NAME="ssf.sh"
 SCRIPT_REPO="https://raw.githubusercontent.com/nickyramma/ssf/main/ssf.sh"
 SCRIPT_PATH="/usr/local/lib/ssf/ssf.sh"
@@ -873,14 +873,13 @@ main_menu() {
         clear
         echo "--- Меню настройки сервера ---"
         echo "1. Настройка SSH (смена порта, отключение пароля, добавление ключа)"
-        echo "2. Отключить ICMP Ping"
-        echo "3. Установить Reshala-Remnawave-Bedolaga (DonMatteoVPN)"
+        echo "2. Отключить ICMP Ping (скрыть сервер от сетевых сканеров)"
+        echo "3. Установить Reshala-Remnawave-Bedolaga (Управление сервером)"
         echo "4. Установить Remnawave Node (Remnanode)"
         echo "5. Обновить Remnawave Node (Remnanode)"
         echo "6. Установить TrafficGuard-auto"
         echo "7. Установить Warp Native"
         echo "8. Проверить и установить обновления"
-        echo "9. Комплексная диагностика Remnanode (VLESS)"
         echo "0. Выход"
         echo "----------------------------"
         read -p "Выберите опцию: " OPTION
