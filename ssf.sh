@@ -11,7 +11,7 @@
 # 8. Проверить и установить обновления
 # 9. Комплексная диагностика Remnanode (VLESS)
 
-SCRIPT_VERSION="1.1.13"
+SCRIPT_VERSION="1.1.14"
 SCRIPT_NAME="ssf.sh"
 SCRIPT_REPO="https://raw.githubusercontent.com/nickyramma/ssf/main/ssf.sh"
 SCRIPT_PATH="/usr/local/lib/ssf/ssf.sh"
@@ -20,6 +20,62 @@ VERSION_FILE="/tmp/ssf_version.txt"
 SSH_CONFIG_FILE="/etc/ssh/sshd_config"
 CURRENT_USER=$(whoami) # Получаем имя текущего пользователя
 OLD_SSH_PORT="22"
+
+# --- Проверка текущего состояния SSH без изменения конфигурации ---
+check_ssh_status() {
+    local CHECK_PORT="$1"
+    local SSH_SERVICE=""
+
+    echo "--- Проверка текущего SSH ---"
+
+    if ! sshd -t; then
+        echo "ОШИБКА: текущая конфигурация SSH не проходит проверку."
+        return 1
+    fi
+
+    if ! sshd -T | awk '$1 == "port" { print $2 }' | grep -Fxq "$CHECK_PORT"; then
+        echo "ОШИБКА: эффективная конфигурация SSH не содержит Port $CHECK_PORT."
+        return 1
+    fi
+
+    if systemctl is-active --quiet ssh.service; then
+        SSH_SERVICE="ssh.service"
+    elif systemctl is-active --quiet sshd.service; then
+        SSH_SERVICE="sshd.service"
+    else
+        echo "ОШИБКА: SSH service-unit не active."
+        return 1
+    fi
+
+    if ! systemctl is-enabled --quiet "$SSH_SERVICE"; then
+        echo "ОШИБКА: автозапуск $SSH_SERVICE не включён."
+        return 1
+    fi
+
+    if ! ss -ltnH4 "sport = :$CHECK_PORT" | grep -q .; then
+        echo "ОШИБКА: SSH не слушает IPv4-порт $CHECK_PORT."
+        return 1
+    fi
+
+    if ss -ltnH6 "sport = :$CHECK_PORT" | grep -q .; then
+        echo "✓ SSH active, автозапуск enabled; порт $CHECK_PORT слушается по IPv4 и IPv6."
+    else
+        echo "✓ SSH active, автозапуск enabled; порт $CHECK_PORT слушается по IPv4."
+        echo "ВНИМАНИЕ: IPv6-сокет не найден."
+    fi
+
+    if command -v ufw >/dev/null 2>&1; then
+        if ufw status | grep -q "Status: active"; then
+            if ufw status | grep -Eq "^${CHECK_PORT}/tcp[[:space:]]+ALLOW[[:space:]]+Anywhere([[:space:]]|$)"; then
+                echo "✓ UFW разрешает $CHECK_PORT/tcp для всех IPv4-адресов."
+            else
+                echo "ВНИМАНИЕ: в активном UFW не найдено правило $CHECK_PORT/tcp для всех IPv4-адресов."
+            fi
+        else
+            echo "ВНИМАНИЕ: UFW установлен, но не активен."
+        fi
+    fi
+}
 
 # --- Функция для конфигурирования SSH ---
 configure_ssh() {
@@ -102,7 +158,16 @@ configure_ssh() {
     echo
     if [[ ! $REPLY =~ ^[Yy]$ ]]; then
         echo "Отменено пользователем. Возвращаемся в главное меню."
+        read -p "Нажмите Enter для продолжения..."
         return 1 # Возвращаемся в меню
+    fi
+
+    # Если выбран уже действующий порт, ничего не меняем: только показываем статус.
+    if sshd -T 2>/dev/null | awk '$1 == "port" { print $2 }' | grep -Fxq "$NEW_SSH_PORT"; then
+        echo "Порт $NEW_SSH_PORT уже настроен для SSH. Изменения не требуются."
+        check_ssh_status "$NEW_SSH_PORT"
+        read -p "Нажмите Enter для продолжения..."
+        return 0
     fi
 
     # --- 1. Изменение порта и настроек аутентификации в sshd_config ---
@@ -144,6 +209,7 @@ configure_ssh() {
         echo "ОШИБКА: порт $NEW_SSH_PORT уже занят. Конфигурация восстановлена."
         ss -ltnp "sport = :$NEW_SSH_PORT"
         cp -p "$SSH_BACKUP_FILE" "$SSH_CONFIG_FILE"
+        read -p "Нажмите Enter для продолжения..."
         return 1
     fi
 
