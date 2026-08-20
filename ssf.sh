@@ -11,7 +11,7 @@
 # 8. Проверить и установить обновления
 # 9. Комплексная диагностика Remnanode (VLESS)
 
-SCRIPT_VERSION="1.1.12"
+SCRIPT_VERSION="1.1.13"
 SCRIPT_NAME="ssf.sh"
 SCRIPT_REPO="https://raw.githubusercontent.com/nickyramma/ssf/main/ssf.sh"
 SCRIPT_PATH="/usr/local/lib/ssf/ssf.sh"
@@ -105,28 +105,13 @@ configure_ssh() {
         return 1 # Возвращаемся в меню
     fi
 
-    # --- 1. Отключение SSH-сокета systemd ---
-    echo "1. Проверяем и отключаем SSH-сокет systemd..."
-    if systemctl is-active --quiet sshd.socket; then
-        echo "sshd.socket активен. Отключаем и останавливаем его."
-        systemctl disable sshd.socket
-        systemctl stop sshd.socket
-        echo "sshd.socket успешно отключен и остановлен."
-    elif systemctl is-active --quiet ssh.socket; then
-        echo "ssh.socket активен. Отключаем и останавливаем его."
-        systemctl disable ssh.socket
-        systemctl stop ssh.socket
-        echo "ssh.socket успешно отключен и остановлен."
-    else
-        echo "SSH-сокет systemd (sshd.socket или ssh.socket) не активен или не найден. Пропускаем."
-    fi
-
-    # --- 2. Изменение порта и настроек аутентификации в sshd_config ---
-    echo "2. Изменяем порт и настройки аутентификации в $SSH_CONFIG_FILE..."
+    # --- 1. Изменение порта и настроек аутентификации в sshd_config ---
+    echo "1. Изменяем порт и настройки аутентификации в $SSH_CONFIG_FILE..."
 
     # Создаем резервную копию оригинального файла
-    cp "$SSH_CONFIG_FILE" "${SSH_CONFIG_FILE}.bak_$(date +%Y%m%d_%H%M%S)"
-    echo "Создана резервная копия: ${SSH_CONFIG_FILE}.bak_$(date +%Y%m%d_%H%M%S)"
+    SSH_BACKUP_FILE="${SSH_CONFIG_FILE}.bak_$(date +%Y%m%d_%H%M%S)"
+    cp "$SSH_CONFIG_FILE" "$SSH_BACKUP_FILE"
+    echo "Создана резервная копия: $SSH_BACKUP_FILE"
 
     # Удаляем или комментируем все старые строки Port
     sed -i "/^Port /d" "$SSH_CONFIG_FILE"
@@ -148,6 +133,19 @@ configure_ssh() {
 
     echo "Текущие настройки Port и PasswordAuthentication в $SSH_CONFIG_FILE:"
     grep -E "(^Port|^PasswordAuthentication|^ChallengeResponseAuthentication|^UsePAM)" "$SSH_CONFIG_FILE" | grep -v '^#' # Показываем соответствующие строки
+
+    if ! sshd -t; then
+        echo "ОШИБКА: конфигурация SSH некорректна. Восстанавливаем резервную копию."
+        cp -p "$SSH_BACKUP_FILE" "$SSH_CONFIG_FILE"
+        return 1
+    fi
+
+    if ss -ltnH "sport = :$NEW_SSH_PORT" | grep -q .; then
+        echo "ОШИБКА: порт $NEW_SSH_PORT уже занят. Конфигурация восстановлена."
+        ss -ltnp "sport = :$NEW_SSH_PORT"
+        cp -p "$SSH_BACKUP_FILE" "$SSH_CONFIG_FILE"
+        return 1
+    fi
 
     # --- 2.1 Добавление SSH-ключа (если выбрано) ---
     if [ "$DISABLE_PASSWORD_AUTH" == "yes" ] && [ -n "$SSH_PUBLIC_KEY" ]; then
@@ -173,12 +171,31 @@ configure_ssh() {
         echo "Установлены правильные права доступа для $SSH_DIR и $AUTHORIZED_KEYS_FILE."
     fi
 
-    # --- 3. Настройка фаервола ---
-    echo "3. Настраиваем фаервол..."
+    # --- 2. Настройка фаервола ---
+    echo "2. Настраиваем фаервол..."
 
     if command -v ufw &> /dev/null; then
         echo "Обнаружен UFW. Настраиваем UFW..."
-        ufw allow "$NEW_SSH_PORT"/tcp
+        if ! ufw allow "$NEW_SSH_PORT"/tcp; then
+            echo "ОШИБКА: не удалось создать правило UFW для $NEW_SSH_PORT/tcp."
+            cp -p "$SSH_BACKUP_FILE" "$SSH_CONFIG_FILE"
+            return 1
+        fi
+        if ufw status | grep -q "Status: active"; then
+            if ! ufw status | grep -Eq "^${NEW_SSH_PORT}/tcp[[:space:]]+ALLOW[[:space:]]+Anywhere([[:space:]]|$)"; then
+                echo "ОШИБКА: активный UFW не содержит правило $NEW_SSH_PORT/tcp для всех IPv4-адресов."
+                cp -p "$SSH_BACKUP_FILE" "$SSH_CONFIG_FILE"
+                return 1
+            fi
+            if grep -Eq '^IPV6=yes' /etc/default/ufw 2>/dev/null && ! ufw status | grep -Eq "^${NEW_SSH_PORT}/tcp[[:space:]]+ALLOW[[:space:]]+Anywhere[[:space:]]+\(v6\)$"; then
+                echo "ОШИБКА: активный UFW не содержит правило $NEW_SSH_PORT/tcp для всех IPv6-адресов."
+                cp -p "$SSH_BACKUP_FILE" "$SSH_CONFIG_FILE"
+                return 1
+            fi
+            echo "Правило UFW для $NEW_SSH_PORT/tcp открыто для всех IPv4-адресов."
+        else
+            echo "ВНИМАНИЕ: правило UFW создано, но UFW не активен. Включите его отдельно, только убедившись, что SSH-разрешение сохранено."
+        fi
         if ufw status | grep -q "${OLD_SSH_PORT}/tcp"; then # Проверяем, есть ли правило для старого порта
             ufw delete allow "$OLD_SSH_PORT"/tcp
             echo "Правило для старого порта $OLD_SSH_PORT/tcp удалено из UFW."
@@ -205,25 +222,64 @@ configure_ssh() {
         echo "sudo service netfilter-persistent save" # или другая команда для сохранения iptables
     fi
 
-    # --- 3.1 Включаем ssh/sshd (systemd enable) ---
-    echo "3.1. Включаем SSH-сервис в systemd (enable)..."
-    if systemctl is-enabled --quiet ssh 2>/dev/null || systemctl is-enabled --quiet sshd 2>/dev/null; then
-        echo "SSH-сервис уже включён (enabled)."
+    # --- 3. Отключение socket activation ---
+    echo "3. Отключаем SSH socket activation..."
+    for SSH_SOCKET in ssh.socket sshd.socket; do
+        if systemctl cat "$SSH_SOCKET" >/dev/null 2>&1; then
+            if ! systemctl disable --now "$SSH_SOCKET"; then
+                echo "ОШИБКА: не удалось отключить $SSH_SOCKET."
+                return 1
+            fi
+            if systemctl is-active --quiet "$SSH_SOCKET" || systemctl is-enabled --quiet "$SSH_SOCKET"; then
+                echo "ОШИБКА: $SSH_SOCKET всё ещё активен или включён."
+                return 1
+            fi
+        fi
+    done
+
+    # --- 4. Выбор, включение и перезапуск service-unit ---
+    if systemctl cat ssh.service >/dev/null 2>&1; then
+        SSH_SERVICE="ssh.service"
+    elif systemctl cat sshd.service >/dev/null 2>&1; then
+        SSH_SERVICE="sshd.service"
     else
-        systemctl enable ssh 2>/dev/null || systemctl enable sshd 2>/dev/null || echo "Не удалось выполнить 'systemctl enable' для ssh/sshd"
+        echo "ОШИБКА: не найден SSH service-unit (ssh.service или sshd.service)."
+        return 1
     fi
 
-    # --- 4. Перезапуск SSH-сервиса ---
-    echo "4. Перезапуск SSH-сервиса..."
-    if systemctl is-active --quiet sshd; then
-        systemctl restart sshd
-        echo "Сервис sshd перезапущен."
-    elif systemctl is-active --quiet ssh; then
-        systemctl restart ssh
-        echo "Сервис ssh перезапущен."
-    else
-        echo "Не удалось найти активный сервис SSH (sshd или ssh). Пожалуйста, проверьте вручную."
+    if ! systemctl enable "$SSH_SERVICE"; then
+        echo "ОШИБКА: не удалось включить автозапуск $SSH_SERVICE."
         return 1
+    fi
+    if ! systemctl restart "$SSH_SERVICE"; then
+        echo "ОШИБКА: $SSH_SERVICE не запустился. Проверьте: systemctl status $SSH_SERVICE"
+        return 1
+    fi
+    if ! systemctl is-active --quiet "$SSH_SERVICE"; then
+        echo "ОШИБКА: $SSH_SERVICE не active после перезапуска."
+        return 1
+    fi
+    if ! systemctl is-enabled --quiet "$SSH_SERVICE"; then
+        echo "ОШИБКА: автозапуск $SSH_SERVICE не включён."
+        return 1
+    fi
+
+    # --- 5. Подтверждение фактического слушателя ---
+    echo "5. Проверяем SSH после перезапуска..."
+    if ! sshd -T | awk '$1 == "port" { print $2 }' | grep -Fxq "$NEW_SSH_PORT"; then
+        echo "ОШИБКА: эффективная конфигурация sshd не содержит Port $NEW_SSH_PORT."
+        return 1
+    fi
+    if ! ss -ltnH4 "sport = :$NEW_SSH_PORT" | grep -q .; then
+        echo "ОШИБКА: SSH не слушает IPv4-порт $NEW_SSH_PORT после перезапуска."
+        ss -ltnp "sport = :$NEW_SSH_PORT"
+        return 1
+    fi
+    if ss -ltnH6 "sport = :$NEW_SSH_PORT" | grep -q .; then
+        echo "✓ SSH слушает $NEW_SSH_PORT по IPv4 и IPv6; сервис active, автозапуск enabled."
+    else
+        echo "✓ SSH слушает $NEW_SSH_PORT по IPv4; сервис active, автозапуск enabled."
+        echo "ВНИМАНИЕ: IPv6-сокет не найден. Проверьте AddressFamily/ListenAddress, если IPv6 нужен."
     fi
 
     echo "--- Скрипт SSH выполнен. ---"
